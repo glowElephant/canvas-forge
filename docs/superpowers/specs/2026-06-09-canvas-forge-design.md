@@ -1,7 +1,7 @@
 # canvas-forge 설계
 
 - 날짜: 2026-06-09
-- 상태: 설계 승인 대기 (MVP1 범위)
+- 상태: 설계 승인 (MVP1 범위)
 
 ## 1. 비전
 
@@ -26,12 +26,18 @@
 ### 3.1 보드앱 (순수 기획툴)
 
 - **프론트**: React + **tldraw** + Vite. 무한 캔버스, 텍스트/이미지/그림 객체, 프레임, 영역 선택 — 전부 tldraw 기본 제공.
-- **서버(호스트 로컬)**: Node. 보드 상태 영속 + 이미지 export 저장 + MCP 서버 노출.
+- **호스트 로컬 프로세스**: Node **단일 프로세스**. 보드 UI 정적 서빙 + 브라우저와 WebSocket + `board.json` 영속 + MCP를 HTTP/SSE로 노출, 이 넷을 한 프로세스가 다 한다.
 - Claude 없이도 화이트보드로 완전히 동작한다.
 
-### 3.2 MCP 서버 (Claude가 붙는 인터페이스)
+### 3.2 단일 프로세스 + WebSocket 브리지 (핵심 결정)
 
-보드앱 서버가 MCP 서버를 노출하고, 호스트가 자기 Claude Code에 등록한다. 도구:
+브라우저는 로컬 파일을 쓸 수도, MCP를 노출할 수도 없다. 그래서 이 둘을 잇는 로컬 프로세스가 **반드시 하나는** 필요하다. 일을 키우지 않기 위해 그 프로세스를 **정확히 하나로 통합**한다(프로세스 2개로 가는 순간 서로 찾는 배선이 생겨 일이 커진다).
+
+- **MCP는 stdio가 아니라 HTTP/SSE 트랜스포트**로 보드 프로세스 안에 함께 노출한다. Claude Code는 URL로 붙는다(`claude mcp add --transport http ...`). stdio로 가면 Claude Code가 MCP 프로세스를 따로 띄워 보드 프로세스를 찾아 붙어야 하므로 프로세스가 2개가 된다 — 피한다.
+- **브라우저↔프로세스 WebSocket 하나**에 세 가지를 모두 태운다: `board.json` 저장(스냅샷 push), `post_card` 푸시(서버→브라우저), `read_area`의 PNG export 요청/응답(서버↔브라우저 왕복).
+- 호스트가 관리하는 것은 평생 **"프로세스 1개 + 브라우저 탭 1개"**가 전부다. 동작: ① `node host.js` 실행 ② 브라우저로 localhost 열기 ③ Claude Code에 MCP URL 등록.
+
+### 3.3 MCP 도구 (Claude가 붙는 인터페이스)
 
 - `list_areas` — 방장이 프레임으로 묶어둔 구역(주제/카테고리) 목록 반환
 - `read_area(area_id)` — 그 영역의 텍스트 객체는 텍스트로, 시각 맥락은 **렌더 스크린샷(PNG)**으로 묶어 멀티모달 응답. (효율: 텍스트로 읽을 수 있는 건 텍스트, 난해한 시각은 스크린샷)
@@ -39,9 +45,17 @@
 
 승인 후 실제 파일/프로젝트 생성은 Claude Code의 기본 도구(로컬 빌드)로 한다 — MCP는 보드 읽기·쓰기까지만 담당.
 
-### 3.3 영역 = tldraw 프레임
+#### read_area의 PNG는 어떻게 얻는가 (옵션 A 채택)
 
-방장이 프레임을 그리고 제목을 달면 그게 한 구역. 프레임 안에 들어간 shapes가 그 영역의 콘텐츠. 카테고리 구획·중첩도 프레임으로 자연스럽게 표현된다. 별도 구획 시스템을 만들지 않는다.
+tldraw의 이미지 export API는 **브라우저 DOM/Canvas 안에서만** 동작한다. MCP 서버(Node)는 직접 렌더할 수 없다. 따라서:
+
+- Claude가 `read_area(id)` 호출 → 서버가 WebSocket으로 브라우저에 "프레임 `id` export" 요청 → 브라우저가 tldraw `exportToBlob(frame)`로 PNG 생성 → WS로 서버에 전송 → 서버가 `.board/exports/<id>/area.png`로 저장하고 MCP 응답(텍스트 + PNG)으로 반환.
+- 실제 화면과 100% 일치한다. 유일한 제약은 "보드 탭이 열려 있어야 함"인데, MVP1은 단일 호스트가 방금 프레임을 그리고 Claude를 부르는 상황이라 자연스럽게 충족된다.
+- 대안이던 헤드리스 브라우저(Playwright)는 무겁고 오프스크린 tldraw 부팅이 복잡해 제외. 주기적 미리 export는 `post_card` 때문에 어차피 WS가 필요하므로 옵션 A 대비 이득이 없어 제외.
+
+### 3.4 영역 = tldraw 프레임
+
+방장이 프레임을 그리고 제목을 달면 그게 한 구역. 프레임 안에 들어간 shapes가 그 영역의 콘텐츠. 카테고리 구획·중첩도 프레임으로 자연스럽게 표현된다. 별도 구획 시스템을 만들지 않는다. `area_id`는 프레임 shape의 id를 그대로 쓴다.
 
 ## 4. MVP1 데이터 흐름
 
@@ -53,10 +67,12 @@
         │
         ▼
 Claude → read_area(area_id)
-        │  서버: 프레임 안 shapes 추출(텍스트) + tldraw 이미지 export로 프레임 영역 PNG 렌더
+        │  서버: board.json에서 프레임 안 shapes 추출(텍스트)
+        │  서버 →(WS)→ 브라우저: "프레임 export" 요청
+        │  브라우저: tldraw exportToBlob(frame) →(WS)→ 서버: PNG 수신·저장
         ▼
 Claude가 파악 → post_card(area_id, "이거 맞나요…")
-        │  서버: 카드 shape를 보드에 추가 → 화면 갱신
+        │  서버 →(WS)→ 브라우저: 카드 shape 추가 → 화면 갱신
         ▼
 [방장이 카드 수정 후 재호출 | 또는 승인]
         │
@@ -83,9 +99,10 @@ Claude가 파악 → post_card(area_id, "이거 맞나요…")
 | 부분 | 기술 |
 |---|---|
 | 프론트 | React + tldraw + Vite |
-| 호스트 서버 | Node (보드 영속 + 이미지 export + MCP 노출) |
-| MCP | `@modelcontextprotocol/sdk` (TypeScript) |
-| 이미지 export | tldraw 이미지 export API로 프레임 영역 PNG |
+| 호스트 프로세스 | Node 단일 프로세스 (UI 서빙 + WebSocket + 보드 영속 + MCP 노출) |
+| MCP | `@modelcontextprotocol/sdk` (TypeScript), **HTTP/SSE 트랜스포트** (stdio 아님) |
+| 브라우저↔프로세스 | WebSocket (`ws`) — board 저장 / post_card 푸시 / export 왕복 |
+| 이미지 export | 브라우저 측 tldraw `exportToBlob(frame)` → WS로 서버 전달 (옵션 A) |
 
 ## 7. MVP1 범위 (명확히)
 
