@@ -46,6 +46,8 @@
 - `startHost({ port, boardFile, exportsDir })` — 경로 주입 가능. 테스트는 temp 디렉토리로 격리(실제 `.board` 오염 금지).
 - 검증: `server/__tests__/`의 mcp.e2e(전체 MCP 루프) + persistence-flush(종료 시 저장) + board/areas 단위. 실 브라우저 검증은 `docs/superpowers/mvp1-loop-verified.png` 참고.
 
+**MVP1 의도된 한계(결함 아님):** 단일 탭 가정 — 탭 여러 개를 동시에 열면 마지막 연결이 활성 클라이언트가 되고 스냅샷이 서로 덮어쓸 수 있다(다중 클라이언트 동기화는 MVP2 Yjs 몫). 인증 없음 + `0.0.0.0` 바인딩이라 LAN의 초대된 사람이 접근 가능(스펙대로 비상업·호스트 초대). 정적 서빙은 경로 탈출만 차단.
+
 ## 참조
 
 - 구현 계획: `docs/superpowers/plans/2026-06-09-mvp1-claude-bridge-loop.md`

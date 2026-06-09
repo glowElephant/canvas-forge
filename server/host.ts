@@ -48,9 +48,9 @@ function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
 /** dist/ 정적 파일 서빙 (SPA: 없는 경로는 index.html) */
 async function serveStatic(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
   const urlPath = decodeURIComponent((req.url || '/').split('?')[0])
-  let filePath = path.join(distDir, urlPath === '/' ? 'index.html' : urlPath)
-  // 경로 탈출 방지
-  if (!filePath.startsWith(distDir)) {
+  let filePath = path.resolve(distDir, '.' + (urlPath === '/' ? '/index.html' : urlPath))
+  // 경로 탈출 방지: distDir 자신이거나 distDir/ 하위여야 함 ('dist-evil' 같은 형제 디렉토리 차단)
+  if (filePath !== distDir && !filePath.startsWith(distDir + path.sep)) {
     res.writeHead(403).end('forbidden')
     return
   }
