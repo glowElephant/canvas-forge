@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import WebSocket from 'ws'
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { startHost, type RunningHost } from '../host.ts'
@@ -32,10 +35,17 @@ const snapshot = {
 
 let host: RunningHost
 let browser: WebSocket
+let tmpDir: string
 const postedCards: Array<{ areaId: string; markdown: string }> = []
 
 beforeAll(async () => {
-  host = await startHost({ port: 0 })
+  // 실제 .board를 오염시키지 않도록 temp 디렉토리로 격리
+  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cf-e2e-'))
+  host = await startHost({
+    port: 0,
+    boardFile: path.join(tmpDir, 'board.json'),
+    exportsDir: path.join(tmpDir, 'exports'),
+  })
 
   // mock 브라우저: WS 접속 → 스냅샷 전송 → requestExport에 PNG 응답, postCard 기록
   browser = new WebSocket(`ws://localhost:${host.port}/ws`)
@@ -61,6 +71,7 @@ beforeAll(async () => {
 afterAll(async () => {
   browser?.close()
   await host?.close()
+  if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true })
 })
 
 async function mcpClient(): Promise<Client> {

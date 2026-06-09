@@ -77,24 +77,43 @@ export interface RunningHost {
   close: () => Promise<void>
 }
 
-export async function startHost(opts: { port?: number } = {}): Promise<RunningHost> {
+export async function startHost(
+  opts: { port?: number; boardFile?: string; exportsDir?: string } = {},
+): Promise<RunningHost> {
   const port = opts.port ?? defaultPort
+  const boardFilePath = opts.boardFile ?? boardFile
+  const exportsDirPath = opts.exportsDir ?? exportsDir
 
   const httpServer = http.createServer()
   const wss = new WebSocketServer({ server: httpServer, path: WS_PATH })
   const bridge = createWsBridge(wss)
 
   // 시작 시 board 복원 → 브라우저 미연결이어도 list_area 등이 동작하도록 latest로 설정
-  const restored = await loadBoard(boardFile)
+  const restored = await loadBoard(boardFilePath)
   if (restored !== null) bridge.pushSnapshot(restored)
 
-  // 스냅샷 수신 시 debounce 저장
+  // 스냅샷 수신 시 debounce 저장. 종료 시 flush 안 하면 마지막 편집이 유실되므로 pending을 추적.
   let saveTimer: NodeJS.Timeout | null = null
+  let pendingSnapshot: unknown = null
+  let hasPending = false
+  async function flushSave(): Promise<void> {
+    if (saveTimer) {
+      clearTimeout(saveTimer)
+      saveTimer = null
+    }
+    if (!hasPending) return
+    hasPending = false
+    try {
+      await saveBoard(boardFilePath, pendingSnapshot)
+    } catch (e) {
+      console.error('board 저장 실패:', e)
+    }
+  }
   bridge.onSnapshot((snapshot) => {
+    pendingSnapshot = snapshot
+    hasPending = true
     if (saveTimer) clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => {
-      saveBoard(boardFile, snapshot).catch((e) => console.error('board 저장 실패:', e))
-    }, 500)
+    saveTimer = setTimeout(() => void flushSave(), 500)
   })
 
   // MCP는 stateful Streamable HTTP: 세션별 transport 보관
@@ -136,8 +155,8 @@ export async function startHost(opts: { port?: number } = {}): Promise<RunningHo
         }
         const server = buildMcpServer({
           bridge,
-          readPersisted: () => loadBoard(boardFile),
-          exportsDir,
+          readPersisted: () => loadBoard(boardFilePath),
+          exportsDir: exportsDirPath,
         })
         await server.connect(transport)
       }
@@ -186,12 +205,13 @@ export async function startHost(opts: { port?: number } = {}): Promise<RunningHo
 
   return {
     port: actualPort,
-    close: () =>
-      new Promise<void>((resolve) => {
-        if (saveTimer) clearTimeout(saveTimer)
-        wss.close()
-        httpServer.close(() => resolve())
-      }),
+    close: async () => {
+      await flushSave() // 종료 전 대기 중인 마지막 편집을 저장 (유실 방지)
+      wss.close()
+      // keep-alive MCP 연결이 남아 close가 무기한 대기하지 않도록 강제 종료
+      httpServer.closeAllConnections()
+      await new Promise<void>((resolve) => httpServer.close(() => resolve()))
+    },
   }
 }
 
@@ -205,6 +225,17 @@ if (invokedDirectly) {
       console.log(`  보드 UI:  http://localhost:${h.port}  (먼저 npm run build 필요)`)
       console.log(`  MCP:      http://localhost:${h.port}${MCP_PATH}`)
       console.log(`  등록:     claude mcp add --transport http canvas-forge http://localhost:${h.port}${MCP_PATH}`)
+
+      // Ctrl+C / 종료 시그널에도 대기 중인 저장을 flush 후 깔끔히 종료
+      let closing = false
+      const shutdown = async () => {
+        if (closing) return
+        closing = true
+        await h.close()
+        process.exit(0)
+      }
+      process.on('SIGINT', shutdown)
+      process.on('SIGTERM', shutdown)
     })
     .catch((e: NodeJS.ErrnoException) => {
       if (e.code === 'EADDRINUSE') {

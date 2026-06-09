@@ -59,9 +59,20 @@ export function connectBoard(editor: Editor, onStatus?: (s: ConnStatus) => void)
 
   connect()
 
+  // 탭을 닫거나 숨길 때, debounce 대기 중이던 마지막 편집을 즉시 전송 (유실 방지)
+  const flushOnHide = () => {
+    if (document.visibilityState === 'hidden') {
+      send({ t: 'snapshot', snapshot: editor.getSnapshot() })
+    }
+  }
+  window.addEventListener('pagehide', flushOnHide)
+  document.addEventListener('visibilitychange', flushOnHide)
+
   return () => {
     closedByUser = true
     if (reconnectTimer) clearTimeout(reconnectTimer)
+    window.removeEventListener('pagehide', flushOnHide)
+    document.removeEventListener('visibilitychange', flushOnHide)
     sync.dispose()
     ws?.close()
   }

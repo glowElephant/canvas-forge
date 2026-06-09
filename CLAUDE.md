@@ -41,7 +41,9 @@
 - MCP SDK 1.29: HTTP 트랜스포트 클래스명은 `StreamableHTTPServerTransport`(context7가 알려준 `Node...` 접두사는 틀림). import `@modelcontextprotocol/sdk/server/streamableHttp.js`. stateful 세션(`mcp-session-id` 헤더)으로 구현 — Claude Code HTTP 클라이언트가 GET(SSE)도 열기 때문에 stateless보다 안전.
 - tldraw 3.15: PNG는 `editor.toImage([shapeId], {format:'png', background:true})`→`{blob}` (브라우저 전용 → 옵션 A로 WS 왕복). 영속 `editor.getSnapshot()`/`loadSnapshot()`. 스냅샷 구조 `{document:{store:Record<id,rec>}, session}`. 프레임=`type:'frame'`·제목=`props.name`, 텍스트=`props.richText`(ProseMirror JSON). `createShapeId`/`toRichText`는 `'tldraw'`에서 import.
 - read_area의 export 저장 폴더명은 area_id를 `safeName()`으로 치환(Windows `:` 금지).
-- 검증: `server/__tests__/mcp.e2e.test.ts`가 mock 브라우저 WS로 전체 MCP 루프를 돌린다. 실 브라우저 검증은 `docs/superpowers/mvp1-loop-verified.png` 참고.
+- 영속은 debounce(500ms) 저장 — 종료 시 유실 막으려 `close()`가 `flushSave()`를 await하고, 직접 실행 시 SIGINT/SIGTERM도 flush 후 종료. `close()`는 `closeAllConnections()`로 keep-alive MCP 연결을 강제 종료(안 하면 종료가 무기한 대기). 브라우저도 `pagehide`/`visibilitychange(hidden)`에 마지막 스냅샷을 즉시 전송.
+- `startHost({ port, boardFile, exportsDir })` — 경로 주입 가능. 테스트는 temp 디렉토리로 격리(실제 `.board` 오염 금지).
+- 검증: `server/__tests__/`의 mcp.e2e(전체 MCP 루프) + persistence-flush(종료 시 저장) + board/areas 단위. 실 브라우저 검증은 `docs/superpowers/mvp1-loop-verified.png` 참고.
 
 ## 참조
 
