@@ -166,7 +166,22 @@ export async function startHost(opts: { port?: number } = {}): Promise<RunningHo
     res.writeHead(405).end('method not allowed')
   }
 
-  await new Promise<void>((resolve) => httpServer.listen(port, resolve))
+  await new Promise<void>((resolve, reject) => {
+    // listen 에러(EADDRINUSE 등)는 httpServer뿐 아니라 wss(server를 감쌈)에서도 재emit된다.
+    // 둘 다 핸들링하지 않으면 unhandled 'error'로 프로세스가 크래시한다.
+    const onError = (err: Error) => {
+      httpServer.off('error', onError)
+      wss.off('error', onError)
+      reject(err)
+    }
+    httpServer.once('error', onError)
+    wss.once('error', onError)
+    httpServer.listen(port, () => {
+      httpServer.off('error', onError)
+      wss.off('error', onError)
+      resolve()
+    })
+  })
   const actualPort = (httpServer.address() as AddressInfo).port
 
   return {
@@ -191,8 +206,15 @@ if (invokedDirectly) {
       console.log(`  MCP:      http://localhost:${h.port}${MCP_PATH}`)
       console.log(`  등록:     claude mcp add --transport http canvas-forge http://localhost:${h.port}${MCP_PATH}`)
     })
-    .catch((e) => {
-      console.error('host 기동 실패:', e)
+    .catch((e: NodeJS.ErrnoException) => {
+      if (e.code === 'EADDRINUSE') {
+        console.error(
+          `포트 ${process.env.PORT || defaultPort}가 이미 사용 중입니다. ` +
+            `다른 host가 떠 있거나 포트가 점유됐습니다. PORT 환경변수로 바꾸거나 기존 프로세스를 종료하세요.`,
+        )
+      } else {
+        console.error('host 기동 실패:', e)
+      }
       process.exit(1)
     })
 }
