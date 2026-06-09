@@ -127,7 +127,9 @@ export async function startHost(opts: { port?: number } = {}): Promise<RunningHo
       if (!transport && isInitializeRequest(body)) {
         transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
-          onsessioninitialized: (sid) => transports.set(sid, transport!),
+          onsessioninitialized: (sid) => {
+            transports.set(sid, transport!)
+          },
         })
         transport.onclose = () => {
           if (transport!.sessionId) transports.delete(transport!.sessionId)

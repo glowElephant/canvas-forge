@@ -28,8 +28,24 @@
 - **절대 경로 하드코딩 금지.** `__dirname`/상대경로/환경변수 사용.
 - MCP는 보드 읽기·쓰기까지만. 실제 파일 빌드는 Claude Code 기본 도구로.
 
+## 구현 (MVP1, 동작 중)
+
+**명령:** `npm install` → `npm run build`(프론트→dist/) → `npm run host`(호스트 프로세스, 기본 포트 4317). 테스트 `npm test`(vitest, 서버만). 타입체크 `npx tsc -p tsconfig.json --noEmit`(프론트) / `-p tsconfig.server.json`(서버).
+
+**구조:**
+- `shared/protocol.ts` — 브라우저↔서버 WS 메시지 타입(`ClientMsg`/`ServerMsg`) 단일 출처.
+- `server/` — `config.ts`(경로/포트, `__dirname` 기반·절대경로 금지), `board.ts`(board.json 영속), `areas.ts`(스냅샷→list/read 추출, **순수 함수**), `ws-bridge.ts`(브라우저 WS: requestExport/pushCard), `mcp.ts`(3도구), `host.ts`(엔트리: 정적+MCP HTTP+WS 한 프로세스).
+- `src/` — `App.tsx`(`<Tldraw onMount>`), `board-sync.ts`(스냅샷 동기화·에코 루프 방지), `ws-client.ts`(export 응답·카드 삽입).
+
+**재발견 방지 — 검증된 사실(설치본 기준):**
+- MCP SDK 1.29: HTTP 트랜스포트 클래스명은 `StreamableHTTPServerTransport`(context7가 알려준 `Node...` 접두사는 틀림). import `@modelcontextprotocol/sdk/server/streamableHttp.js`. stateful 세션(`mcp-session-id` 헤더)으로 구현 — Claude Code HTTP 클라이언트가 GET(SSE)도 열기 때문에 stateless보다 안전.
+- tldraw 3.15: PNG는 `editor.toImage([shapeId], {format:'png', background:true})`→`{blob}` (브라우저 전용 → 옵션 A로 WS 왕복). 영속 `editor.getSnapshot()`/`loadSnapshot()`. 스냅샷 구조 `{document:{store:Record<id,rec>}, session}`. 프레임=`type:'frame'`·제목=`props.name`, 텍스트=`props.richText`(ProseMirror JSON). `createShapeId`/`toRichText`는 `'tldraw'`에서 import.
+- read_area의 export 저장 폴더명은 area_id를 `safeName()`으로 치환(Windows `:` 금지).
+- 검증: `server/__tests__/mcp.e2e.test.ts`가 mock 브라우저 WS로 전체 MCP 루프를 돌린다. 실 브라우저 검증은 `docs/superpowers/mvp1-loop-verified.png` 참고.
+
 ## 참조
 
+- 구현 계획: `docs/superpowers/plans/2026-06-09-mvp1-claude-bridge-loop.md`
 - 프로젝트 명세: `docs/spec.md`
 - 상세 설계: `docs/superpowers/specs/2026-06-09-canvas-forge-design.md`
 - 큐레이션된 노하우: `docs/know-how/*.md` (특히 `mcp--*`, `skills--superpowers-skills-pattern`)
