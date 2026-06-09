@@ -15,7 +15,7 @@ npm run build          # 프론트(tldraw 보드)를 dist/로 빌드
 npm run host           # 호스트 단일 프로세스 기동 (기본 포트 4317, PORT 환경변수로 변경)
 ```
 
-1. 브라우저로 `http://localhost:4317` 열기 → 무한 캔버스가 뜬다. 이 탭은 켜둔 채로 둔다(Claude의 영역 읽기가 이 탭의 렌더를 쓴다).
+1. 브라우저로 `http://localhost:4317` 열기 → 무한 캔버스가 뜬다. 이 탭은 켜둔 채로 둔다(Claude의 영역 읽기가 이 탭의 렌더를 쓴다). 상단 가운데 배지로 서버 연결 상태를 확인할 수 있고, host를 재시작해도 탭이 자동 재연결한다.
 2. Claude Code에 MCP 등록:
    ```bash
    claude mcp add --transport http canvas-forge http://localhost:4317/mcp

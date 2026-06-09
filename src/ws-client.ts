@@ -1,44 +1,84 @@
 import { type Editor, createShapeId, toRichText } from 'tldraw'
 import type { ClientMsg, ServerMsg } from '../shared/protocol'
 import { WS_PATH } from '../shared/protocol'
-import { setupBoardSync } from './board-sync'
+import { setupBoardSync, type BoardSync } from './board-sync'
 
 // 서버와의 WebSocket 연결. board 동기화 + export 요청 처리 + post_card 카드 삽입.
+// host 재시작 등으로 끊기면 백오프로 자동 재연결한다.
 
-export function connectBoard(editor: Editor): () => void {
+export type ConnStatus = 'connecting' | 'open' | 'closed'
+
+export function connectBoard(editor: Editor, onStatus?: (s: ConnStatus) => void): () => void {
   const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${WS_PATH}`
-  const ws = new WebSocket(url)
+
+  let ws: WebSocket | null = null
+  let closedByUser = false
+  let retry = 0
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+
+  // sync(스토어 리스너)는 소켓 수명과 무관 — 한 번만 설정하고 재연결 시 재사용
+  const sync: BoardSync = setupBoardSync(editor, (snapshot) => send({ t: 'snapshot', snapshot }))
 
   const send = (m: ClientMsg) => {
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m))
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m))
   }
 
-  const sync = setupBoardSync(editor, (snapshot) => send({ t: 'snapshot', snapshot }))
+  function connect() {
+    onStatus?.('connecting')
+    ws = new WebSocket(url)
 
-  ws.onopen = () => {
-    // 연결 직후 현재 보드 상태를 서버에 한 번 push (서버가 비어있을 때 대비)
-    send({ t: 'snapshot', snapshot: editor.getSnapshot() })
-  }
-
-  ws.onmessage = async (ev) => {
-    let msg: ServerMsg
-    try {
-      msg = JSON.parse(ev.data) as ServerMsg
-    } catch {
-      return
+    ws.onopen = () => {
+      retry = 0
+      onStatus?.('open')
+      // 연결 직후 현재 보드 상태를 서버에 한 번 push (서버가 비어있을 때 대비)
+      send({ t: 'snapshot', snapshot: editor.getSnapshot() })
     }
-    if (msg.t === 'snapshot') {
-      sync.applyRemoteSnapshot(msg.snapshot)
-    } else if (msg.t === 'requestExport') {
-      await handleExport(editor, msg.areaId, msg.reqId, send)
-    } else if (msg.t === 'postCard') {
-      postCard(editor, msg.areaId, msg.markdown)
+
+    ws.onmessage = async (ev) => {
+      let msg: ServerMsg
+      try {
+        msg = JSON.parse(ev.data) as ServerMsg
+      } catch {
+        return
+      }
+      await handleServerMsg(editor, msg, sync, send)
+    }
+
+    ws.onerror = () => {
+      ws?.close()
+    }
+
+    ws.onclose = () => {
+      onStatus?.('closed')
+      if (closedByUser) return
+      const delay = Math.min(1000 * 2 ** retry, 10000) // 1s,2s,4s,8s,10s…
+      retry += 1
+      reconnectTimer = setTimeout(connect, delay)
     }
   }
+
+  connect()
 
   return () => {
+    closedByUser = true
+    if (reconnectTimer) clearTimeout(reconnectTimer)
     sync.dispose()
-    ws.close()
+    ws?.close()
+  }
+}
+
+async function handleServerMsg(
+  editor: Editor,
+  msg: ServerMsg,
+  sync: BoardSync,
+  send: (m: ClientMsg) => void,
+): Promise<void> {
+  if (msg.t === 'snapshot') {
+    sync.applyRemoteSnapshot(msg.snapshot)
+  } else if (msg.t === 'requestExport') {
+    await handleExport(editor, msg.areaId, msg.reqId, send)
+  } else if (msg.t === 'postCard') {
+    postCard(editor, msg.areaId, msg.markdown)
   }
 }
 
