@@ -1,0 +1,32 @@
+{
+  "name": "canvas-forge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "무한 캔버스 협업 기획툴 + Claude가 MCP로 붙는 브릿지 (MVP1)",
+  "scripts": {
+    "dev:web": "vite",
+    "build": "vite build",
+    "host": "tsx server/host.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tldraw": "^3.15.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/ws": "^8.5.13",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3",
+    "vitest": "^2.1.8"
+  }
+}
