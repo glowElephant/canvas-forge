@@ -30,8 +30,8 @@ export function connectBoard(editor: Editor, onStatus?: (s: ConnStatus) => void)
     ws.onopen = () => {
       retry = 0
       onStatus?.('open')
-      // 연결 직후 현재 보드 상태를 서버에 한 번 push (서버가 비어있을 때 대비)
-      send({ t: 'snapshot', snapshot: editor.getSnapshot() })
+      // 여기서 push하지 않는다 — 서버의 init을 받기 전에 push하면 저장된 보드를 빈 상태로 덮을 수 있다.
+      // 서버가 곧 보낼 init 메시지를 받아 처리한다(handleServerMsg).
     }
 
     ws.onmessage = async (ev) => {
@@ -84,7 +84,17 @@ async function handleServerMsg(
   sync: BoardSync,
   send: (m: ClientMsg) => void,
 ): Promise<void> {
-  if (msg.t === 'snapshot') {
+  if (msg.t === 'init') {
+    if (msg.snapshot !== null) {
+      // 서버가 진실의 출처 — 서버 상태를 적용한다(우리 상태를 덮어쓰지 않게 push 안 함).
+      sync.applyRemoteSnapshot(msg.snapshot)
+    } else {
+      // 서버에 보드가 없다 — 우리가 그릴 게 있으면(예: 서버 board.json 삭제 후 리로드) 한 번 올려준다.
+      const snap = editor.getSnapshot()
+      const shapeCount = editor.getCurrentPageShapes().length
+      if (shapeCount > 0) send({ t: 'snapshot', snapshot: snap })
+    }
+  } else if (msg.t === 'snapshot') {
     sync.applyRemoteSnapshot(msg.snapshot)
   } else if (msg.t === 'requestExport') {
     await handleExport(editor, msg.areaId, msg.reqId, send)

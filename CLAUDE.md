@@ -42,6 +42,7 @@
 - tldraw 3.15: PNG는 `editor.toImage([shapeId], {format:'png', background:true})`→`{blob}` (브라우저 전용 → 옵션 A로 WS 왕복). 영속 `editor.getSnapshot()`/`loadSnapshot()`. 스냅샷 구조 `{document:{store:Record<id,rec>}, session}`. 프레임=`type:'frame'`·제목=`props.name`, 텍스트=`props.richText`(ProseMirror JSON). `createShapeId`/`toRichText`는 `'tldraw'`에서 import.
 - read_area의 export 저장 폴더명은 area_id를 `safeName()`으로 치환(Windows `:` 금지).
 - 영속은 debounce(500ms) 저장 — 종료 시 유실 막으려 `close()`가 `flushSave()`를 await하고, 직접 실행 시 SIGINT/SIGTERM도 flush 후 종료. `close()`는 `closeAllConnections()`로 keep-alive MCP 연결을 강제 종료(안 하면 종료가 무기한 대기). 브라우저도 `pagehide`/`visibilitychange(hidden)`에 마지막 스냅샷을 즉시 전송.
+- **init 핸드셰이크(중요)**: 서버는 연결 직후 `{t:'init', snapshot}`을 1회 보낸다. 브라우저는 init을 받기 전에 절대 자기 상태를 push하지 않는다 — 안 그러면 새 탭(빈 보드)이 연결되며 저장된 보드를 빈 상태로 덮어쓴다(데이터 유실). 서버가 진실의 출처. init.snapshot이 null(서버 보드 없음)일 때만 브라우저가 자기 shape를 올린다.
 - `startHost({ port, boardFile, exportsDir })` — 경로 주입 가능. 테스트는 temp 디렉토리로 격리(실제 `.board` 오염 금지).
 - 검증: `server/__tests__/`의 mcp.e2e(전체 MCP 루프) + persistence-flush(종료 시 저장) + board/areas 단위. 실 브라우저 검증은 `docs/superpowers/mvp1-loop-verified.png` 참고.
 

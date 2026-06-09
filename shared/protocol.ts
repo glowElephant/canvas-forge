@@ -9,9 +9,10 @@ export type ClientMsg =
 
 /** 서버 → 브라우저 */
 export type ServerMsg =
+  | { t: 'init'; snapshot: unknown | null } // 연결 직후 서버 상태 1회 전달(없으면 null). 브라우저는 이걸 적용한다.
   | { t: 'requestExport'; reqId: string; areaId: string } // 프레임 PNG export 요청
   | { t: 'postCard'; areaId: string; markdown: string } // 카드 shape 삽입 요청
-  | { t: 'snapshot'; snapshot: unknown } // 초기 복원 push
+  | { t: 'snapshot'; snapshot: unknown } // 서버가 능동적으로 보내는 상태 push
 
 /** WS 엔드포인트 경로 */
 export const WS_PATH = '/ws'

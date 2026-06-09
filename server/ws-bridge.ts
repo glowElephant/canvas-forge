@@ -34,10 +34,9 @@ export function createWsBridge(wss: WebSocketServer): WsBridge {
 
   wss.on('connection', (ws: WebSocket) => {
     client = ws
-    // 새 연결에 마지막 스냅샷 복원 push
-    if (latestSnapshot !== null) {
-      ws.send(JSON.stringify({ t: 'snapshot', snapshot: latestSnapshot } satisfies ServerMsg))
-    }
+    // 연결 직후 서버 상태를 init으로 1회 전달(없으면 null).
+    // 브라우저는 이걸 받아 적용하고, 적용 전에 자기 상태를 push하지 않는다(빈 상태 덮어쓰기 방지).
+    ws.send(JSON.stringify({ t: 'init', snapshot: latestSnapshot } satisfies ServerMsg))
 
     ws.on('message', (data) => {
       let msg: ClientMsg
