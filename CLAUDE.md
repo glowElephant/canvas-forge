@@ -19,7 +19,9 @@
 
 - **MVP1 (완료)** — Claude 브릿지 루프: 프레임 영역 지정 + Claude가 MCP로 붙어 `read_area`→`post_card`→승인→빌드. 실 브라우저 검증 완료.
 - **MVP2 (완료)** — 실시간 협업: N명 동시접속, 멀티커서, **호스트 허브 WS 동기화(`@tldraw/sync` 공식)**. ※ 당초 "Yjs+WebRTC P2P"는 시그널링/TURN이 필요해 서버리스가 아니라서 기각 — 호스트가 이미 WS 서버이므로 허브 방식 채택.
-- **MVP3 (다음)** — 음성·풍부한 멀티모달.
+- **MVP3a (완료)** — 멀티모달 읽기: read_area가 이미지 원본 개별 전달·텍스트 파일 카드(`meta.cfFile`)·링크 unfurl+본문까지 멀티모달로 반환.
+- **MVP3b (다음)** — PDF 추출, iframe 임의 URL 임베드, 보드 내 위치 북마크.
+- **MVP3c** — 영상 프레임 추출(ffmpeg), 크로스 프로젝트 북마크. (음성은 사용자 결정으로 제외)
 
 ## 가드레일 (하지 말 것)
 
@@ -46,6 +48,8 @@
 - **`/assets` 경로 충돌 주의** — vite 번들이 `/assets/`를 쓰므로 업로드 경로는 `/uploads`(ASSETS_PATH). 겹치면 JS 404로 빈 페이지.
 - note shape를 서버에서 만들 땐 props 전부 필요: `{color, labelColor, size, font, fontSizeAdjustment, align, verticalAlign, growY, url, richText, scale}` + `index: getIndexAbove(...)`(`@tldraw/utils`), `createShapeId`/`toRichText`(`@tldraw/tlschema`).
 - read_area의 export 저장 폴더명은 area_id를 `safeName()`으로 치환(Windows `:` 금지).
+- **MVP3a 멀티모달**: `server/modalities.ts` — `extractAreaModalities`(순수: image/svg/외부이미지/`meta.cfFile`/bookmark·embed 분류) + `readUpload`(경로탈출 차단)/`fetchLinkText`/`unfurl`(IO, 타임아웃 8s·1MB 제한). 파일 카드는 **커스텀 shape가 아니라 note shape + `meta.cfFile`**(스키마 변경 없음 → sync 안전). 클라 핸들러는 `src/external.tsx` — `<Tldraw>` **자식으로 렌더해야 함**(useToasts/useTranslation 컨텍스트 필요), 이미지·영상은 `defaultHandleExternalFileContent`에 위임. URL 붙여넣기 검증은 `editor.putExternalContent({type:'url', url})`로 시뮬레이션 가능.
+- SVG는 Claude API image 미지원 → 이미지가 아니라 소스 텍스트로 전달.
 - 영속은 debounce(500ms) — 종료 유실 막으려 `close()`가 flush를 await, 직접 실행 시 SIGINT/SIGTERM도 flush 후 종료. `closeAllConnections()`로 keep-alive MCP 연결 강제 종료(안 하면 종료 무기한 대기).
 - `startHost({ port, boardFile, exportsDir, assetsDir })` — 경로 주입 가능. 테스트는 temp 디렉토리로 격리(실제 `.board` 오염 금지).
 - 검증: `server/__tests__/` 19개(테스트: sync-room 마이그레이션·post_card / mcp.e2e / persistence-flush / degraded-mode / static-guard / board / areas). 실 브라우저 검증 스크린샷: `docs/superpowers/mvp1-loop-verified.png`, `mvp2-collab-verified.png`.
