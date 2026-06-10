@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useEditor, useValue, type TLShape } from 'tldraw'
 import type { VideoComment } from '../server/modalities'
+import { useDrag } from './useDrag'
 
 // 영상 댓글 패널 (MVP3c): 영상 shape를 선택하면 표시.
 // 댓글은 shape.meta.cfComments에 저장 → sync로 전 참여자 실시간 공유.
@@ -33,6 +34,7 @@ function Panel({ shape }: { shape: TLShape }) {
   const editor = useEditor()
   const [text, setText] = useState('')
   const [tagTime, setTagTime] = useState(true)
+  const { pos, onPointerDown } = useDrag({ x: 8, y: 340 })
 
   const comments = useValue(
     'cf-comments',
@@ -72,14 +74,18 @@ function Panel({ shape }: { shape: TLShape }) {
   return (
     <div
       style={{
-        position: 'absolute', top: 64, left: 8, zIndex: 1000, width: 230,
+        position: 'absolute', top: pos.y, left: pos.x, zIndex: 1000, width: 230,
         borderRadius: 8, background: 'rgba(255,255,255,0.96)',
         boxShadow: '0 1px 6px rgba(0,0,0,0.18)', font: '12px/1.5 system-ui, sans-serif', color: '#111',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}
     >
-      <div style={{ padding: '6px 10px', background: '#f1f3f5', fontWeight: 600 }}>
-        🎬 영상 댓글 {comments.length ? `(${comments.length})` : ''}
+      <div
+        onPointerDown={onPointerDown}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: '#f1f3f5', fontWeight: 600, cursor: 'grab', touchAction: 'none' }}
+      >
+        <span>🎬 영상 댓글 {comments.length ? `(${comments.length})` : ''}</span>
+        <span style={{ color: '#adb5bd', userSelect: 'none' }} title="드래그로 이동">⠿</span>
       </div>
       <div style={{ maxHeight: 220, overflowY: 'auto' }}>
         {comments.length === 0 && (

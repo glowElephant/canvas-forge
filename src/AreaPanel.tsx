@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createShapeId, toRichText, useEditor, useValue, type TLShapeId } from 'tldraw'
+import { useDrag } from './useDrag'
 
 // 영역(프레임) 내비게이션 패널 (MVP3b):
 //  - 프레임 목록 클릭 → 해당 영역으로 카메라 이동
@@ -9,6 +10,8 @@ import { createShapeId, toRichText, useEditor, useValue, type TLShapeId } from '
 export function AreaPanel() {
   const editor = useEditor()
   const [open, setOpen] = useState(true)
+  // 우상단은 tldraw 스타일 패널과 겹침 → 기본 좌측 + 헤더 드래그로 이동 가능
+  const { pos, onPointerDown } = useDrag({ x: 8, y: 64 })
 
   const frames = useValue(
     'frames',
@@ -57,10 +60,10 @@ export function AreaPanel() {
     <div
       style={{
         position: 'absolute',
-        top: 64,
-        right: 8,
+        left: pos.x,
+        top: pos.y,
         zIndex: 1000,
-        width: 180,
+        width: 190,
         borderRadius: 8,
         background: 'rgba(255,255,255,0.95)',
         boxShadow: '0 1px 6px rgba(0,0,0,0.15)',
@@ -69,15 +72,25 @@ export function AreaPanel() {
         overflow: 'hidden',
       }}
     >
-      <button
-        onClick={() => setOpen(!open)}
-        style={{ width: '100%', padding: '6px 10px', border: 'none', background: '#f1f3f5', cursor: 'pointer', textAlign: 'left', font: 'inherit', fontWeight: 600 }}
+      <div
+        onPointerDown={onPointerDown}
+        style={{ display: 'flex', alignItems: 'center', background: '#f1f3f5', cursor: 'grab', touchAction: 'none' }}
       >
-        영역 {frames.length}개 {open ? '▾' : '▸'}
-      </button>
+        <button
+          onClick={() => setOpen(!open)}
+          style={{ flex: 1, padding: '6px 10px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit', fontWeight: 600 }}
+        >
+          영역 {frames.length}개 {open ? '▾' : '▸'}
+        </button>
+        <span style={{ padding: '0 8px', color: '#adb5bd', userSelect: 'none' }} title="드래그로 이동">⠿</span>
+      </div>
       {open && (
         <div style={{ maxHeight: 240, overflowY: 'auto' }}>
-          {frames.length === 0 && <div style={{ padding: '8px 10px', color: '#868e96' }}>프레임을 그려 영역을 만드세요</div>}
+          {frames.length === 0 && (
+            <div style={{ padding: '8px 10px', color: '#868e96' }}>
+              프레임 도구로 영역을 그리세요 — 단축키 <b>F</b> (툴바 오른쪽 ⌃ 더보기 안에도 있음)
+            </div>
+          )}
           {frames.map((f) => (
             <div key={f.id} style={{ display: 'flex', alignItems: 'center', borderTop: '1px solid #f1f3f5' }}>
               <button

@@ -4,16 +4,28 @@
 // MVP2부터 보드 동기화는 /sync(@tldraw/sync, TLSocketRoom)가 전담한다.
 // 이 /ws 브리지는 "브라우저만 할 수 있는 일" — 프레임 PNG export — 전용이다.
 
+/** 커서 채팅 한 줄 (브라우저↔서버 동일 형태로 릴레이) */
+export interface CursorChatMsg {
+  t: 'cursorChat'
+  userId: string
+  name: string
+  color: string
+  text: string
+}
+
 /** 브라우저 → 서버 */
 export type ClientMsg =
   | { t: 'exportResult'; reqId: string; pngBase64: string }
   | { t: 'exportError'; reqId: string; error: string }
+  | CursorChatMsg
 
 /** 서버 → 브라우저 */
 export type ServerMsg =
   | { t: 'requestExport'; reqId: string; areaId: string }
   // 영상의 특정 시점 프레임 캡처 요청 (응답은 exportResult/exportError 재사용)
   | { t: 'requestVideoFrame'; reqId: string; shapeId: string; time: number }
+  // 다른 참여자의 커서 채팅 릴레이 (보낸 사람 제외 브로드캐스트)
+  | CursorChatMsg
 
 /** export 브리지 WS 경로 */
 export const WS_PATH = '/ws'

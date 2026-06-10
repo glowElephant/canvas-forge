@@ -30,6 +30,14 @@ export function createWsBridge(wss: WebSocketServer): WsBridge {
       } catch {
         return
       }
+      // 커서 채팅: 보낸 사람 제외 전원에게 릴레이
+      if (msg.t === 'cursorChat') {
+        const payload = JSON.stringify(msg)
+        for (const other of clients) {
+          if (other !== ws && other.readyState === other.OPEN) other.send(payload)
+        }
+        return
+      }
       const p = pending.get(msg.reqId)
       if (!p) return
       clearTimeout(p.timer)

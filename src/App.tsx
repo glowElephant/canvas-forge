@@ -3,7 +3,8 @@ import { Tldraw, type Editor, type TLAssetStore } from 'tldraw'
 import { useSync } from '@tldraw/sync'
 import 'tldraw/tldraw.css'
 import { SYNC_PATH, ASSETS_PATH } from '../shared/protocol'
-import { connectExportBridge } from './ws-client'
+import { connectExportBridge, type BridgeHandle } from './ws-client'
+import { CursorChat } from './CursorChat'
 import { ExternalHandlers } from './external'
 import { AreaPanel } from './AreaPanel'
 import { VideoCommentPanel } from './VideoCommentPanel'
@@ -55,11 +56,14 @@ function Board({ user }: { user: UserInfo }) {
     [],
   )
   const store = useSync({ uri, assets: hostAssets, userInfo: user })
+  const [bridge, setBridge] = useState<BridgeHandle | null>(null)
 
   const handleMount = useCallback((editor: Editor) => {
     // 디버그/검증용으로 editor를 전역 노출 (tldraw 앱 관행)
     ;(window as unknown as { editor: Editor }).editor = editor
-    return connectExportBridge(editor)
+    const handle = connectExportBridge(editor)
+    setBridge(handle)
+    return () => handle.dispose()
   }, [])
 
   if (store.status === 'loading') {
@@ -75,6 +79,7 @@ function Board({ user }: { user: UserInfo }) {
         <ExternalHandlers />
         <AreaPanel />
         <VideoCommentPanel />
+        {bridge && <CursorChat bridge={bridge} user={user} />}
       </Tldraw>
       <TopBar online={store.connectionStatus === 'online'} />
     </div>

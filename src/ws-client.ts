@@ -1,18 +1,27 @@
 import type { Editor } from 'tldraw'
-import type { ClientMsg, ServerMsg } from '../shared/protocol'
+import type { ClientMsg, CursorChatMsg, ServerMsg } from '../shared/protocol'
 import { WS_PATH } from '../shared/protocol'
 
-// export 브리지: 서버의 read_area가 요청하는 프레임 PNG 렌더를 담당.
-// (보드 동기화는 useSync(/sync) 몫 — 이 소켓은 export 전용)
+// export 브리지: 서버의 read_area가 요청하는 프레임 PNG 렌더 + 커서 채팅 릴레이.
+// (보드 동기화는 useSync(/sync) 몫)
 // host 재시작 등으로 끊기면 백오프로 자동 재연결한다.
 
-export function connectExportBridge(editor: Editor): () => void {
+export interface BridgeHandle {
+  dispose(): void
+  /** 내 커서 채팅 한 줄을 다른 참여자에게 전송 */
+  sendCursorChat(msg: Omit<CursorChatMsg, 't'>): void
+  /** 다른 참여자의 커서 채팅 수신 콜백 */
+  onCursorChat(cb: (msg: CursorChatMsg) => void): void
+}
+
+export function connectExportBridge(editor: Editor): BridgeHandle {
   const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${WS_PATH}`
 
   let ws: WebSocket | null = null
   let closedByUser = false
   let retry = 0
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  const chatCbs: Array<(m: CursorChatMsg) => void> = []
 
   const send = (m: ClientMsg) => {
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m))
@@ -36,6 +45,8 @@ export function connectExportBridge(editor: Editor): () => void {
         await handleExport(editor, msg.areaId, msg.reqId, send)
       } else if (msg.t === 'requestVideoFrame') {
         await handleVideoFrame(editor, msg.shapeId, msg.time, msg.reqId, send)
+      } else if (msg.t === 'cursorChat') {
+        for (const cb of chatCbs) cb(msg)
       }
     }
 
@@ -53,10 +64,18 @@ export function connectExportBridge(editor: Editor): () => void {
 
   connect()
 
-  return () => {
-    closedByUser = true
-    if (reconnectTimer) clearTimeout(reconnectTimer)
-    ws?.close()
+  return {
+    dispose() {
+      closedByUser = true
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+      ws?.close()
+    },
+    sendCursorChat(msg) {
+      send({ t: 'cursorChat', ...msg })
+    },
+    onCursorChat(cb) {
+      chatCbs.push(cb)
+    },
   }
 }
 
