@@ -98,7 +98,11 @@ async function serveStatic(req: http.IncomingMessage, res: http.ServerResponse):
       return
     }
     const ext = path.extname(filePath).toLowerCase()
-    res.writeHead(200, { 'content-type': MIME[ext] || 'application/octet-stream' })
+    // 캐시 정책: html은 항상 재검증(옛 번들 잔류 방지), 해시 자산(/assets/)은 영구 캐시
+    const cacheControl = filePath.includes(`${path.sep}assets${path.sep}`)
+      ? 'public, max-age=31536000, immutable'
+      : 'no-cache'
+    res.writeHead(200, { 'content-type': MIME[ext] || 'application/octet-stream', 'cache-control': cacheControl })
     fs.createReadStream(filePath).pipe(res)
   } catch {
     res.writeHead(500).end('static error')

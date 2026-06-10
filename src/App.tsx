@@ -176,6 +176,9 @@ function TopBar({ online }: { online: boolean }) {
       >
         <span style={{ width: 8, height: 8, borderRadius: 999, background: online ? '#16a34a' : '#dc2626' }} />
         {online ? '실시간 동기화 중' : '연결 끊김 — 재연결 시도 중'}
+        <span style={{ color: '#adb5bd', fontSize: 10 }} title="빌드 시각 (MM-DD HH:mm)">
+          {__BUILD_ID__}
+        </span>
       </div>
       <InviteButton />
     </div>
