@@ -58,13 +58,18 @@ function Board({ user }: { user: UserInfo }) {
   const store = useSync({ uri, assets: hostAssets, userInfo: user })
   const [bridge, setBridge] = useState<BridgeHandle | null>(null)
 
-  const handleMount = useCallback((editor: Editor) => {
-    // 디버그/검증용으로 editor를 전역 노출 (tldraw 앱 관행)
-    ;(window as unknown as { editor: Editor }).editor = editor
-    const handle = connectExportBridge(editor)
-    setBridge(handle)
-    return () => handle.dispose()
-  }, [])
+  const handleMount = useCallback(
+    (editor: Editor) => {
+      // 디버그/검증용으로 editor를 전역 노출 (tldraw 앱 관행)
+      ;(window as unknown as { editor: Editor }).editor = editor
+      // 모든 새 shape에 작성 시각·작성자 기록 → Claude가 논의를 시간 순서로 이해 (read_area 정렬 근거)
+      editor.getInitialMetaForShape = () => ({ createdAt: Date.now(), createdBy: user.name })
+      const handle = connectExportBridge(editor)
+      setBridge(handle)
+      return () => handle.dispose()
+    },
+    [user.name],
+  )
 
   if (store.status === 'loading') {
     return <Center>보드에 연결 중…</Center>

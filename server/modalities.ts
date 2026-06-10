@@ -56,8 +56,14 @@ export function extractAreaModalities(
 ): AreaModalities {
   const store = input.store as Record<string, AnyRecord>
   const out: AreaModalities = { images: [], svgs: [], externalImages: [], files: [], pdfs: [], links: [], gotoPins: [], videos: [] }
+  // 작성 시간순으로 순회 → 모든 모달리티 목록이 시간순 (meta.createdAt, 없으면 맨 앞)
+  const sorted = Object.values(store).sort((a, b) => {
+    const ta = typeof a?.meta?.createdAt === 'number' ? (a.meta.createdAt as number) : 0
+    const tb = typeof b?.meta?.createdAt === 'number' ? (b.meta.createdAt as number) : 0
+    return ta - tb
+  })
 
-  for (const r of Object.values(store)) {
+  for (const r of sorted) {
     if (r?.typeName !== 'shape' || r.parentId !== areaId) continue
     const props = r.props ?? {}
 

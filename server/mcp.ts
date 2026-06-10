@@ -33,6 +33,10 @@ const INSTRUCTIONS = `canvas-forge: 무한 캔버스 협업 기획 보드. 사�
 
 개념: '영역' = 보드의 프레임 1개. 사람이 프레임으로 주제를 묶는다. area_id = 프레임 shape id.
 
+영역 선택: list_areas에서 ★(사용자 지정) 표시가 있으면 사용자가 그 영역을 보라고 지목한 것이다. 사용자가 영역을 특정하지 않고 "보드 봐줘"라고 하면 ★ 지정 영역부터, 지정이 없으면 목록을 보여주고 어느 영역인지 물어라.
+
+시간 순서(중요): read_area의 텍스트는 작성 시간순으로 정렬되고 [HH:MM 작성자] 라벨이 붙는다. 보드의 논의는 흐름이다 — 나중 항목이 앞 항목을 수정·반박·구체화할 수 있으니 시간 순서대로 이해하고, 충돌하면 최신 항목을 우선하되 확신이 없으면 post_card로 물어라.
+
 기본 루프(중요):
 1) list_areas로 영역 목록 확인
 2) read_area(area_id)로 영역을 읽는다
@@ -59,8 +63,11 @@ export function buildMcpServer(deps: McpDeps): McpServer {
       if (areas.length === 0) {
         return { content: [{ type: 'text', text: '영역(프레임)이 없습니다. 보드에서 프레임을 그리고 제목을 달아 주세요.' }] }
       }
-      const lines = areas.map((a) => `- ${a.id}: ${a.title}`).join('\n')
-      return { content: [{ type: 'text', text: `영역 ${areas.length}개:\n${lines}` }] }
+      const lines = areas.map((a) => `- ${a.picked ? '★ ' : ''}${a.id}: ${a.title}${a.picked ? ' (사용자 지정)' : ''}`).join('\n')
+      const note = areas.some((a) => a.picked)
+        ? '\n★ = 사용자가 보드에서 "Claude가 볼 영역"으로 지정함. 영역을 특정하지 않은 요청이면 지정 영역부터 처리하세요.'
+        : ''
+      return { content: [{ type: 'text', text: `영역 ${areas.length}개:\n${lines}${note}` }] }
     },
   )
 

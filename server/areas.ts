@@ -7,18 +7,24 @@ interface ShapeRecord {
   typeName?: string
   type?: string
   parentId?: string
+  meta?: Record<string, unknown>
   props?: Record<string, unknown>
 }
 
 export interface AreaInfo {
   id: string
   title: string
+  /** 사용자가 "Claude가 볼 영역"으로 지정(★)했는지 (frame meta.cfClaudePick) */
+  picked?: boolean
 }
 
 export interface AreaShape {
   id: string
   type: string
   text: string
+  /** 작성 시각 (epoch ms, 클라이언트 getInitialMetaForShape가 기록) */
+  createdAt?: number
+  createdBy?: string
 }
 
 export interface AreaContent {
@@ -75,10 +81,16 @@ export function listAreas(snapshot: unknown): AreaInfo[] {
     .map((r) => ({
       id: r.id,
       title: (r.props?.name as string) || '(제목 없음)',
+      picked: !!r.meta?.cfClaudePick,
     }))
 }
 
-/** 한 영역의 내용 — 프레임의 직속 자식 shape들에서 텍스트 추출 */
+function timeLabel(ts: number): string {
+  const d = new Date(ts)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+/** 한 영역의 내용 — 프레임의 직속 자식 shape들에서 텍스트 추출, **작성 시간순 정렬** */
 export function readArea(snapshot: unknown, areaId: string): AreaContent | null {
   const store = getStore(snapshot)
   const frame = store[areaId]
@@ -86,11 +98,20 @@ export function readArea(snapshot: unknown, areaId: string): AreaContent | null 
 
   const shapes: AreaShape[] = Object.values(store)
     .filter((r) => isShape(r) && r.parentId === areaId)
-    .map((r) => ({ id: r.id, type: r.type ?? 'unknown', text: shapeText(r) }))
+    .map((r) => ({
+      id: r.id,
+      type: r.type ?? 'unknown',
+      text: shapeText(r),
+      createdAt: typeof r.meta?.createdAt === 'number' ? (r.meta.createdAt as number) : undefined,
+      createdBy: typeof r.meta?.createdBy === 'string' ? (r.meta.createdBy as string) : undefined,
+    }))
+    // 작성 시간순 — 논의 흐름(나중 항목이 앞 항목을 수정/반박)을 따라 읽을 수 있게.
+    // createdAt 없는 레거시 shape는 맨 앞(가장 오래된 것으로 간주).
+    .sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
 
   const text = shapes
-    .map((s) => s.text)
-    .filter((t) => t.length > 0)
+    .filter((s) => s.text.length > 0)
+    .map((s) => (s.createdAt ? `[${timeLabel(s.createdAt)}${s.createdBy ? ` ${s.createdBy}` : ''}] ${s.text}` : s.text))
     .join('\n\n')
 
   return {

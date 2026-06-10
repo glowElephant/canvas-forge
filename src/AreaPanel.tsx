@@ -19,9 +19,20 @@ export function AreaPanel() {
       editor
         .getCurrentPageShapes()
         .filter((s) => s.type === 'frame')
-        .map((s) => ({ id: s.id, name: ((s.props as { name?: string }).name || '(제목 없음)') as string })),
+        .map((s) => ({
+          id: s.id,
+          name: ((s.props as { name?: string }).name || '(제목 없음)') as string,
+          picked: !!s.meta?.cfClaudePick,
+        })),
     [editor],
   )
+
+  /** "Claude가 볼 영역" 지정 토글 — list_areas에 ★로 표시되어 Claude가 우선 처리 */
+  const togglePick = (id: string) => {
+    const s = editor.getShape(id as TLShapeId)
+    if (!s) return
+    editor.updateShape({ id: s.id, type: s.type, meta: { ...s.meta, cfClaudePick: !s.meta?.cfClaudePick } })
+  }
 
   // 핀 클릭 → 대상 영역으로 점프
   useEffect(() => {
@@ -92,18 +103,25 @@ export function AreaPanel() {
             </div>
           )}
           {frames.map((f) => (
-            <div key={f.id} style={{ display: 'flex', alignItems: 'center', borderTop: '1px solid #f1f3f5' }}>
+            <div key={f.id} style={{ display: 'flex', alignItems: 'center', borderTop: '1px solid #f1f3f5', background: f.picked ? '#fff9db' : 'none' }}>
               <button
                 onClick={() => goTo(f.id)}
                 title="이 영역으로 이동"
                 style={{ flex: 1, padding: '6px 10px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
               >
-                {f.name}
+                {f.picked ? '★ ' : ''}{f.name}
+              </button>
+              <button
+                onClick={() => togglePick(f.id)}
+                title="Claude가 볼 영역으로 지정/해제 (★)"
+                style={{ padding: '6px 4px', border: 'none', background: 'none', cursor: 'pointer', font: 'inherit', opacity: f.picked ? 1 : 0.45 }}
+              >
+                🤖
               </button>
               <button
                 onClick={() => dropPin(f.id, f.name)}
                 title="현 위치에 이 영역으로 가는 핀 만들기"
-                style={{ padding: '6px 8px', border: 'none', background: 'none', cursor: 'pointer', font: 'inherit' }}
+                style={{ padding: '6px 8px 6px 4px', border: 'none', background: 'none', cursor: 'pointer', font: 'inherit' }}
               >
                 📍
               </button>

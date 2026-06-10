@@ -62,7 +62,7 @@ describe('sync-room', () => {
     const boardFile = await tmpBoardFile(legacyBoard)
     handle = await createSyncRoom({ boardFile })
     const input = roomToAreasInput(handle.room.getCurrentSnapshot())
-    expect(listAreas(input)).toEqual([{ id: 'shape:frame1', title: '레거시 영역' }])
+    expect(listAreas(input)).toEqual([{ id: 'shape:frame1', title: '레거시 영역', picked: false }])
     expect(readArea(input, 'shape:frame1')!.text).toContain('레거시 텍스트')
   })
 
@@ -89,7 +89,7 @@ describe('sync-room', () => {
       (r) => (r as { type?: string }).type === 'note',
     )
     expect(notes2).toHaveLength(1)
-    expect(listAreas(input2)).toEqual([{ id: 'shape:frame1', title: '레거시 영역' }])
+    expect(listAreas(input2)).toEqual([{ id: 'shape:frame1', title: '레거시 영역', picked: false }])
   })
 
   it('board.json이 없으면 빈 room으로 시작한다', async () => {

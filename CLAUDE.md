@@ -54,6 +54,10 @@
 - **MVP3b**: PDF는 `unpdf`(pdf.js, worker 불필요)로 추출 — 깨진 xref도 복구함. 위치 핀=`meta.cfGoto={targetId}`(클릭 점프는 `AreaPanel`의 `editor.on('event')` pointer_up). 임베드 정의는 editor가 아니라 **`editor.getShapeUtil('embed').getEmbedDefinitions()`**에 산다. **catch-all 임베드를 넣으면 URL 붙여넣기가 전부 iframe이 되는 충돌** → `registerExternalContentHandler('url')`로 북마크 강제(임베드 다이얼로그는 `type:'embed'` 경로라 안전). MCP 서버 instructions는 `new McpServer(info, { instructions })` — initialize 응답으로 붙는 Claude에게 자동 전달됨(루프 규칙·read_area 해석법·post_card 규칙).
 - 브라우저 검증 대체 수단: `node scripts/verify-headless.mjs <url>`(MVP3b 전반) / `scripts/verify-video.mjs`(영상 — MediaRecorder로 webm을 페이지에서 직접 생성, 캡처 프레임 픽셀 검사까지). chrome-devtools MCP가 잠겼을 때 CDP로 직접 헤드리스 검증. **검증 전 `.board` 초기화 필수**(이전 실행 상태 누적됨).
 - 영상 댓글 UI(`VideoCommentPanel`)는 보드 DOM의 `[data-shape-id] video`에서 currentTime을 읽는다. shape `meta`에 배열을 쓸 땐 `JsonArray` 캐스트 필요.
+- **시간 순서**: 모든 새 shape에 `editor.getInitialMetaForShape = () => ({createdAt, createdBy})` (App onMount) → `readArea`가 createdAt 오름차순 정렬 + `[HH:MM 작성자]` 라벨, modalities도 같은 순서. 레거시(createdAt 없음)는 맨 앞. Claude instructions에 "시간 순서대로 이해, 충돌 시 최신 우선" 규칙 포함.
+- **영역 지정(★)**: AreaPanel 🤖 토글 → frame `meta.cfClaudePick` → `list_areas`에 ★ 표시 + "지정 영역 우선" 안내. 사용자가 영역 안 정하고 "보드 봐줘" 하면 Claude는 ★부터 본다.
+- **커서 채팅**: `/`로 입력창, 엔터마다 한 줄(로그처럼 쌓임), 줄별 5.4s 후 페이드아웃. 릴레이는 `/ws` 브리지 브로드캐스트(`cursorChat`, 보낸 사람 제외) — sync/presence와 무관, 영속 안 됨(의도). 패널들은 `useDrag`로 이동 가능(우상단은 tldraw 스타일 패널과 겹치므로 기본 좌측).
+- 검증 스크립트 추가: `scripts/verify-chat.mjs`(실 키입력 송신→릴레이→DOM 표시→페이드아웃).
 - 영속은 debounce(500ms) — 종료 유실 막으려 `close()`가 flush를 await, 직접 실행 시 SIGINT/SIGTERM도 flush 후 종료. `closeAllConnections()`로 keep-alive MCP 연결 강제 종료(안 하면 종료 무기한 대기).
 - `startHost({ port, boardFile, exportsDir, assetsDir })` — 경로 주입 가능. 테스트는 temp 디렉토리로 격리(실제 `.board` 오염 금지).
 - 검증: `server/__tests__/` 19개(테스트: sync-room 마이그레이션·post_card / mcp.e2e / persistence-flush / degraded-mode / static-guard / board / areas). 실 브라우저 검증 스크린샷: `docs/superpowers/mvp1-loop-verified.png`, `mvp2-collab-verified.png`.
