@@ -4,6 +4,8 @@ import { useSync } from '@tldraw/sync'
 import 'tldraw/tldraw.css'
 import { SYNC_PATH, ASSETS_PATH } from '../shared/protocol'
 import { isImeComposingEnter } from './ime'
+import { uid } from './uid'
+import { ErrorRibbon } from './ErrorRibbon'
 import { connectExportBridge, type BridgeHandle } from './ws-client'
 import { ChatPanel } from './ChatPanel'
 import { CursorChat } from './CursorChat'
@@ -52,8 +54,12 @@ const hostAssets: TLAssetStore = {
 
 export default function App() {
   const [user, setUser] = useState<UserInfo | null>(loadUser)
-  if (!user) return <NameGate onDone={setUser} />
-  return <Board user={user} />
+  return (
+    <>
+      {user ? <Board user={user} /> : <NameGate onDone={setUser} />}
+      <ErrorRibbon />
+    </>
+  )
 }
 
 function Board({ user }: { user: UserInfo }) {
@@ -115,7 +121,7 @@ function NameGate({ onDone }: { onDone: (u: UserInfo) => void }) {
     if (!trimmed || done.current) return
     done.current = true
     const user: UserInfo = {
-      id: crypto.randomUUID(),
+      id: uid(),
       name: trimmed,
       color: COLORS[Math.floor(Math.random() * COLORS.length)],
     }

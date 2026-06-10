@@ -1,6 +1,7 @@
 import type { Editor } from 'tldraw'
 import type { ClientMsg, CursorChatMsg, ServerMsg } from '../shared/protocol'
 import { WS_PATH } from '../shared/protocol'
+import { uid } from './uid'
 
 // export 브리지: 서버의 read_area가 요청하는 프레임 PNG 렌더 + 커서 채팅 릴레이.
 // (보드 동기화는 useSync(/sync) 몫)
@@ -76,7 +77,7 @@ export function connectExportBridge(editor: Editor): BridgeHandle {
       ws?.close()
     },
     sendCursorChat(msg) {
-      const full: CursorChatMsg = { t: 'cursorChat', id: crypto.randomUUID(), ts: Date.now(), ...msg }
+      const full: CursorChatMsg = { t: 'cursorChat', id: uid(), ts: Date.now(), ...msg }
       send(full)
       // 로컬 에코 — 보낸 사람의 말풍선/패널도 같은 경로로 갱신 (UI 이원화 방지)
       for (const cb of chatCbs) cb(full)
