@@ -15,15 +15,16 @@ npm run build          # 프론트(tldraw 보드)를 dist/로 빌드
 npm run host           # 호스트 단일 프로세스 기동 (기본 포트 4317, PORT 환경변수로 변경)
 ```
 
-1. 브라우저로 `http://localhost:4317` 열기 → 무한 캔버스가 뜬다. 이 탭은 켜둔 채로 둔다(Claude의 영역 읽기가 이 탭의 렌더를 쓴다). 상단 가운데 배지로 서버 연결 상태를 확인할 수 있고, host를 재시작해도 탭이 자동 재연결한다.
-2. Claude Code에 MCP 등록:
+1. 브라우저로 `http://localhost:4317` 열기 → 이름 입력 후 무한 캔버스가 뜬다. 상단 배지로 동기화 상태를 확인할 수 있고, host를 재시작해도 자동 재연결한다.
+2. **초대**: 같은 네트워크 사람에게 `http://<호스트IP>:4317`을 알려주면 끝. 각자 이름으로 들어와 같은 보드를 실시간 동시 편집(멀티커서·이름표 표시).
+3. Claude Code에 MCP 등록:
    ```bash
    claude mcp add --transport http canvas-forge http://localhost:4317/mcp
    ```
-3. 보드에서 **프레임**을 그리고 제목을 단다(= 한 영역). 프레임 안에 텍스트·그림을 배치.
-4. Claude Code 세션에서 호출: "list_areas 봐줘" → `read_area`로 영역을 텍스트+스크린샷으로 읽음 → `post_card`로 "이거 맞나요" 카드를 보드에 띄움 → 방장이 승인하면 Claude Code 기본 도구로 실제 빌드.
+4. 보드에서 **프레임**을 그리고 제목을 단다(= 한 영역). 프레임 안에 텍스트·그림을 배치.
+5. Claude Code 세션에서 호출: "list_areas 봐줘" → `read_area`로 영역을 텍스트+스크린샷으로 읽음(스크린샷은 열려 있는 탭 하나가 렌더) → `post_card`로 "이거 맞나요" 카드를 띄우면 **모든 참여자 화면에 실시간 반영** → 방장이 승인하면 Claude Code 기본 도구로 실제 빌드.
 
-데이터는 호스트 로컬 `.board/`(board.json + exports)에 남고, 닫았다 열어도 복원된다.
+데이터는 호스트 로컬 `.board/`(board.json + exports + uploads)에 남고, 닫았다 열어도 복원된다. 카드 게시(`post_card`)와 영역 텍스트 읽기는 브라우저 탭이 없어도 동작한다.
 
 ### 개발
 
@@ -34,8 +35,9 @@ npm test               # 서버 테스트(vitest): board 영속 / areas 추출 /
 
 ## Status
 
-✅ **MVP1 동작** — Claude 브릿지 루프(단일 호스트, 영역 지정→`read_area`→`post_card`→승인→빌드). 실제 브라우저 end-to-end 검증 완료(테스트 13개 통과 + 실 렌더 PNG 왕복 확인).
+✅ **MVP1 동작** — Claude 브릿지 루프(영역 지정→`read_area`→`post_card`→승인→빌드). 실 브라우저 end-to-end 검증.
+✅ **MVP2 동작** — 실시간 협업: N명 동시접속·멀티커서·호스트 허브 동기화(`@tldraw/sync`). 실 브라우저 2탭(호스트+게스트) 동시 편집·카드 실시간 전파·재시작 복원 검증(테스트 19개 통과).
 
-로드맵: MVP1 Claude 브릿지 루프 → MVP2 실시간 협업(N명) → MVP3 음성·멀티모달.
+로드맵: ~~MVP1 Claude 브릿지 루프~~ → ~~MVP2 실시간 협업(N명)~~ → MVP3 음성·멀티모달.
 
-명세: [`docs/spec.md`](docs/spec.md) · 설계: [`docs/superpowers/specs/2026-06-09-canvas-forge-design.md`](docs/superpowers/specs/2026-06-09-canvas-forge-design.md)
+명세: [`docs/spec.md`](docs/spec.md) · 설계: [`docs/superpowers/specs/2026-06-09-canvas-forge-design.md`](docs/superpowers/specs/2026-06-09-canvas-forge-design.md), [`MVP2`](docs/superpowers/specs/2026-06-10-mvp2-realtime-collab-design.md)

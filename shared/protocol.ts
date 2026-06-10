@@ -18,5 +18,5 @@ export const WS_PATH = '/ws'
 export const SYNC_PATH = '/sync'
 /** MCP 엔드포인트 경로 */
 export const MCP_PATH = '/mcp'
-/** 이미지 등 asset 업로드/서빙 경로 prefix */
-export const ASSETS_PATH = '/assets'
+/** 이미지 등 asset 업로드/서빙 경로 prefix (주의: vite 번들이 /assets/를 쓰므로 겹치면 안 됨) */
+export const ASSETS_PATH = '/uploads'
