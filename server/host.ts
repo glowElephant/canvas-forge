@@ -15,6 +15,7 @@ import { createWsBridge } from './ws-bridge.ts'
 import { buildMcpServer } from './mcp.ts'
 import { createSyncRoom, roomToAreasInput } from './sync-room.ts'
 import { postCardToRoom } from './cards.ts'
+import { unfurl } from './modalities.ts'
 import { distDir, boardFile, exportsDir, assetsDir, defaultPort } from './config.ts'
 
 // 호스트 단일 프로세스: 정적 UI + tldraw sync(/sync) + export 브리지(/ws) + MCP(HTTP) + assets.
@@ -167,6 +168,24 @@ export async function startHost(
       return
     }
 
+    // 북마크 메타데이터 (URL 붙여넣기 시 클라이언트가 사용)
+    if (url === '/api/unfurl') {
+      const target = new URL(req.url || '/', 'http://localhost').searchParams.get('url')
+      if (!target) {
+        res.writeHead(400).end('url 쿼리 필요')
+        return
+      }
+      try {
+        const meta = await unfurl(target)
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(meta))
+      } catch (e) {
+        res.writeHead(200, { 'content-type': 'application/json' }).end(
+          JSON.stringify({ title: '', description: '', image: '', favicon: '', error: (e as Error).message }),
+        )
+      }
+      return
+    }
+
     // 초대 링크 (UI의 "초대 링크 복사" 버튼이 사용)
     if (url === '/api/invite') {
       const p = (httpServer.address() as AddressInfo).port
@@ -236,6 +255,7 @@ export async function startHost(
           getSnapshot: () => roomToAreasInput(syncRoom.room.getCurrentSnapshot()),
           postCard: (areaId, markdown) => postCardToRoom(syncRoom.room, areaId, markdown),
           exportsDir: exportsDirPath,
+          assetsDir: assetsDirPath,
         })
         await server.connect(transport)
       }

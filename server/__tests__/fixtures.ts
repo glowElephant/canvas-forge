@@ -8,7 +8,9 @@ export function richText(text: string) {
   return { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] }
 }
 
-export function legacyBoardFixture(opts: { frameTitle?: string; text?: string } = {}) {
+export function legacyBoardFixture(
+  opts: { frameTitle?: string; text?: string; extraStore?: Record<string, unknown> } = {},
+) {
   const frameTitle = opts.frameTitle ?? '로그인 화면'
   const text = opts.text ?? '이메일과 비밀번호'
   return {
@@ -31,6 +33,7 @@ export function legacyBoardFixture(opts: { frameTitle?: string; text?: string } 
           },
           typeName: 'shape',
         },
+        ...(opts.extraStore ?? {}),
       },
       schema: createTLSchema({ shapes: defaultShapeSchemas, bindings: defaultBindingSchemas }).serialize(),
     },

@@ -3,6 +3,7 @@ import path from 'node:path'
 import { z } from 'zod'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { listAreas, readArea } from './areas.ts'
+import { extractAreaModalities, readUpload, fetchLinkText } from './modalities.ts'
 import type { WsBridge } from './ws-bridge.ts'
 
 // MCP 서버: Claude가 붙는 3도구. 보드 읽기·쓰기까지만 — 실제 빌드는 Claude Code 기본 도구로.
@@ -18,6 +19,8 @@ export interface McpDeps {
   postCard: (areaId: string, markdown: string) => Promise<void>
   /** read_area PNG 저장 루트 (.board/exports) */
   exportsDir: string
+  /** 업로드 파일 루트 (.board/uploads) — 이미지 원본·파일 카드 읽기용 */
+  assetsDir: string
 }
 
 /** area_id(예: "shape:frame1")를 파일시스템 안전 폴더명으로 변환 (Windows ':' 금지 대응) */
@@ -80,6 +83,45 @@ export function buildMcpServer(deps: McpDeps): McpServer {
           type: 'text',
           text: `\n[스크린샷 생략: ${(err as Error).message}]`,
         })
+      }
+
+      // MVP3a 멀티모달: 개별 이미지 원본 + SVG 소스 + 파일 카드 내용 + 링크 본문
+      const mods = extractAreaModalities(deps.getSnapshot(), area_id)
+
+      for (const img of mods.images.slice(0, 8)) {
+        const buf = await readUpload(deps.assetsDir, img.file)
+        if (!buf) {
+          parts.push({ type: 'text', text: `[이미지: ${img.name}] (파일 없음)` })
+          continue
+        }
+        parts.push({ type: 'text', text: `[이미지 원본: ${img.name}]` })
+        parts.push({ type: 'image', data: buf.toString('base64'), mimeType: img.mime })
+      }
+      for (const ext of mods.externalImages.slice(0, 8)) {
+        parts.push({ type: 'text', text: `[외부 이미지: ${ext.name}] ${ext.url}` })
+      }
+      for (const svg of mods.svgs.slice(0, 4)) {
+        const buf = await readUpload(deps.assetsDir, svg.file)
+        const src = buf ? buf.toString('utf8').slice(0, 4000) : '(파일 없음)'
+        parts.push({ type: 'text', text: `[SVG 소스: ${svg.name}]\n${src}` })
+      }
+      for (const f of mods.files.slice(0, 8)) {
+        const buf = await readUpload(deps.assetsDir, f.file)
+        if (!buf) {
+          parts.push({ type: 'text', text: `[파일: ${f.name}] (파일 없음)` })
+          continue
+        }
+        let body = buf.toString('utf8')
+        if (body.length > 16000) body = body.slice(0, 16000) + '\n…(잘림)'
+        parts.push({ type: 'text', text: `[파일: ${f.name} (${f.mime})]\n${body}` })
+      }
+      for (const link of mods.links.slice(0, 5)) {
+        try {
+          const excerpt = await fetchLinkText(link.url)
+          parts.push({ type: 'text', text: `[링크: ${link.url}${link.title ? ` — ${link.title}` : ''}]\n${excerpt}` })
+        } catch (err) {
+          parts.push({ type: 'text', text: `[링크: ${link.url}] (읽기 실패: ${(err as Error).message})` })
+        }
       }
 
       return { content: parts }
