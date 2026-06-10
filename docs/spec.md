@@ -9,7 +9,7 @@
 ## Milestones
 
 1. **MVP1 — Claude 브릿지 루프**: 단일 호스트가 캔버스에 자유 배치 + 프레임으로 영역 지정 + MCP 3도구(`list_areas`/`read_area`/`post_card`)로 Claude가 붙어 파악→카드→승인→빌드.
-2. **MVP2 — 실시간 협업**: N명 동시접속, 멀티커서, 서버리스 P2P 동기화(Yjs + WebRTC).
+2. **MVP2 — 실시간 협업**: N명 동시접속, 멀티커서, 호스트 허브 WS 동기화(`@tldraw/sync` 공식). ※ 당초 "Yjs + WebRTC P2P"였으나 WebRTC는 시그널링/TURN이 필요해 서버리스가 아니며, 호스트가 이미 WS 서버를 돌리므로 호스트 허브 + tldraw 공식 sync로 결정(2026-06-10, [MVP2 설계](superpowers/specs/2026-06-10-mvp2-realtime-collab-design.md)).
 3. **MVP3 — 풍부한 멀티모달**: 음성(녹음·STT) 등 표현 수단 확장.
 
 ## Constraints
@@ -30,4 +30,4 @@
 - 실시간 멀티유저·음성을 MVP1에 넣지 말 것 — 차별점(Claude가 보드를 읽는 루프)을 먼저 증명. 멀티유저부터 만들면 제일 큰 리스크를 늦게 확인하게 된다.
 - 보드 버튼이 Claude를 능동적으로 깨우는 트리거(나)는 MVP1 제외(폴링/큐 필요).
 - 절대 경로 하드코딩 금지.
-- 무한 캔버스·실시간 동기화를 직접 구현하지 말 것 — tldraw(+추후 Yjs)의 검증된 조합을 쓴다.
+- 무한 캔버스·실시간 동기화를 직접 구현하지 말 것 — tldraw(+`@tldraw/sync`)의 검증된 조합을 쓴다.
