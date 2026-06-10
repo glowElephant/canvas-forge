@@ -6,11 +6,16 @@ import { listAreas, readArea } from './areas.ts'
 import type { WsBridge } from './ws-bridge.ts'
 
 // MCP 서버: Claude가 붙는 3도구. 보드 읽기·쓰기까지만 — 실제 빌드는 Claude Code 기본 도구로.
+// MVP2: 텍스트 읽기·카드 쓰기는 서버 권위 room에서 직접(브라우저 불필요),
+//       PNG 스크린샷만 브라우저 브리지에 위임(tldraw 렌더는 브라우저 전용).
 
 export interface McpDeps {
+  /** PNG export 브리지 (브라우저 위임) */
   bridge: WsBridge
-  /** 디스크에 영속된 스냅샷 (브라우저 미연결 시 폴백) */
-  readPersisted: () => Promise<unknown | null>
+  /** 현재 보드 상태 — room 스냅샷을 areas.ts 입력 형태로 */
+  getSnapshot: () => { store: Record<string, unknown> }
+  /** 카드 추가 — room store에 서버측 직접 쓰기 */
+  postCard: (areaId: string, markdown: string) => Promise<void>
   /** read_area PNG 저장 루트 (.board/exports) */
   exportsDir: string
 }
@@ -20,12 +25,8 @@ function safeName(areaId: string): string {
   return areaId.replace(/[^a-zA-Z0-9_-]/g, '_')
 }
 
-async function currentSnapshot(deps: McpDeps): Promise<unknown | null> {
-  return deps.bridge.getLatestSnapshot() ?? (await deps.readPersisted())
-}
-
 export function buildMcpServer(deps: McpDeps): McpServer {
-  const server = new McpServer({ name: 'canvas-forge', version: '0.1.0' })
+  const server = new McpServer({ name: 'canvas-forge', version: '0.2.0' })
 
   server.registerTool(
     'list_areas',
@@ -35,11 +36,7 @@ export function buildMcpServer(deps: McpDeps): McpServer {
       inputSchema: {},
     },
     async () => {
-      const snapshot = await currentSnapshot(deps)
-      if (!snapshot) {
-        return { content: [{ type: 'text', text: '보드 데이터가 아직 없습니다. 보드 탭을 열고 프레임을 그려 주세요.' }] }
-      }
-      const areas = listAreas(snapshot)
+      const areas = listAreas(deps.getSnapshot())
       if (areas.length === 0) {
         return { content: [{ type: 'text', text: '영역(프레임)이 없습니다. 보드에서 프레임을 그리고 제목을 달아 주세요.' }] }
       }
@@ -57,11 +54,7 @@ export function buildMcpServer(deps: McpDeps): McpServer {
       inputSchema: { area_id: z.string().describe('list_areas가 반환한 영역 id (프레임 shape id)') },
     },
     async ({ area_id }) => {
-      const snapshot = await currentSnapshot(deps)
-      if (!snapshot) {
-        return { content: [{ type: 'text', text: '보드 데이터가 없습니다.' }], isError: true }
-      }
-      const content = readArea(snapshot, area_id)
+      const content = readArea(deps.getSnapshot(), area_id)
       if (!content) {
         return { content: [{ type: 'text', text: `영역을 찾을 수 없습니다: ${area_id}` }], isError: true }
       }
@@ -75,7 +68,7 @@ export function buildMcpServer(deps: McpDeps): McpServer {
         { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
       > = [{ type: 'text', text: textPart }]
 
-      // 브라우저에 프레임 PNG export 요청 (옵션 A). 실패해도 텍스트는 반환.
+      // 브라우저에 프레임 PNG export 요청. 실패해도 텍스트는 반환.
       try {
         const png = await deps.bridge.requestExport(area_id)
         const dir = path.join(deps.exportsDir, safeName(area_id))
@@ -98,21 +91,22 @@ export function buildMcpServer(deps: McpDeps): McpServer {
     {
       title: '카드 게시',
       description:
-        'Claude의 정리("이거 맞나요")를 보드의 해당 영역 옆에 카드로 추가한다. markdown 텍스트를 받아 카드 shape로 띄운다.',
+        'Claude의 정리("이거 맞나요")를 보드의 해당 영역 옆에 카드로 추가한다. markdown 텍스트를 받아 카드 shape로 띄운다. 연결된 모든 참여자 화면에 실시간 반영된다.',
       inputSchema: {
         area_id: z.string().describe('카드를 붙일 기준 영역 id'),
         markdown: z.string().describe('카드에 표시할 markdown 정리 내용'),
       },
     },
     async ({ area_id, markdown }) => {
-      if (!deps.bridge.hasClient()) {
+      try {
+        await deps.postCard(area_id, markdown)
+        return { content: [{ type: 'text', text: `카드를 보드(${area_id})에 띄웠습니다.` }] }
+      } catch (err) {
         return {
-          content: [{ type: 'text', text: '보드 브라우저가 연결돼 있지 않아 카드를 띄울 수 없습니다. 탭을 열어 주세요.' }],
+          content: [{ type: 'text', text: `카드 추가 실패: ${(err as Error).message}` }],
           isError: true,
         }
       }
-      deps.bridge.pushCard(area_id, markdown)
-      return { content: [{ type: 'text', text: `카드를 보드(${area_id})에 띄웠습니다.` }] }
     },
   )
 

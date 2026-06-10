@@ -1,20 +1,22 @@
 // 브라우저(보드앱) ↔ 호스트 프로세스 WebSocket 메시지 타입.
 // 단일 출처: 프론트/서버 양쪽이 이 파일을 import 한다.
+//
+// MVP2부터 보드 동기화는 /sync(@tldraw/sync, TLSocketRoom)가 전담한다.
+// 이 /ws 브리지는 "브라우저만 할 수 있는 일" — 프레임 PNG export — 전용이다.
 
 /** 브라우저 → 서버 */
 export type ClientMsg =
-  | { t: 'snapshot'; snapshot: unknown } // 보드 상태 push (영속용)
   | { t: 'exportResult'; reqId: string; pngBase64: string }
   | { t: 'exportError'; reqId: string; error: string }
 
 /** 서버 → 브라우저 */
-export type ServerMsg =
-  | { t: 'init'; snapshot: unknown | null } // 연결 직후 서버 상태 1회 전달(없으면 null). 브라우저는 이걸 적용한다.
-  | { t: 'requestExport'; reqId: string; areaId: string } // 프레임 PNG export 요청
-  | { t: 'postCard'; areaId: string; markdown: string } // 카드 shape 삽입 요청
-  | { t: 'snapshot'; snapshot: unknown } // 서버가 능동적으로 보내는 상태 push
+export type ServerMsg = { t: 'requestExport'; reqId: string; areaId: string }
 
-/** WS 엔드포인트 경로 */
+/** export 브리지 WS 경로 */
 export const WS_PATH = '/ws'
+/** tldraw sync WS 경로 */
+export const SYNC_PATH = '/sync'
 /** MCP 엔드포인트 경로 */
 export const MCP_PATH = '/mcp'
+/** 이미지 등 asset 업로드/서빙 경로 prefix */
+export const ASSETS_PATH = '/assets'

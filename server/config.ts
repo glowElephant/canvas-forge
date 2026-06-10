@@ -17,5 +17,8 @@ export const boardFile = path.join(boardDir, 'board.json')
 /** read_area가 렌더한 프레임 PNG 저장 루트 (.board/exports/<area-id>/area.png) */
 export const exportsDir = path.join(boardDir, 'exports')
 
+/** 업로드된 이미지 등 asset 저장 루트 (.board/assets/) */
+export const assetsDir = path.join(boardDir, 'assets')
+
 /** 기본 포트 (환경변수 PORT로 덮어쓰기 가능) */
 export const defaultPort = Number(process.env.PORT) || 4317

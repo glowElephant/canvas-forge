@@ -1,6 +1,6 @@
-import type { TLSocketRoom } from '@tldraw/sync-core'
 import { createShapeId, toRichText } from '@tldraw/tlschema'
 import { getIndexAbove, type IndexKey } from '@tldraw/utils'
+import type { BoardRoom } from './sync-room.ts'
 
 // post_card 서버측 구현: room store에 note shape를 직접 put.
 // 브라우저 연결이 없어도 동작하고, 연결된 모든 클라이언트에 sync로 자동 전파된다.
@@ -17,7 +17,7 @@ interface AnyRecord {
 }
 
 /** 영역(frame) 오른쪽에 note 카드를 추가. frame이 없으면 페이지 원점 근처. */
-export async function postCardToRoom(room: TLSocketRoom, areaId: string, markdown: string): Promise<void> {
+export async function postCardToRoom(room: BoardRoom, areaId: string, markdown: string): Promise<void> {
   await room.updateStore((store) => {
     const all = store.getAll() as AnyRecord[]
     const frame = all.find((r) => r.typeName === 'shape' && r.type === 'frame' && r.id === areaId)

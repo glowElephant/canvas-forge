@@ -1,5 +1,6 @@
 import http from 'node:http'
 import type { AddressInfo } from 'node:net'
+import type { Duplex } from 'node:stream'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
@@ -8,13 +9,15 @@ import { randomUUID } from 'node:crypto'
 import { WebSocketServer } from 'ws'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
-import { WS_PATH, MCP_PATH } from '../shared/protocol.ts'
+import { WS_PATH, SYNC_PATH, MCP_PATH, ASSETS_PATH } from '../shared/protocol.ts'
 import { createWsBridge } from './ws-bridge.ts'
 import { buildMcpServer } from './mcp.ts'
-import { loadBoard, saveBoard } from './board.ts'
-import { distDir, boardFile, exportsDir, defaultPort } from './config.ts'
+import { createSyncRoom, roomToAreasInput } from './sync-room.ts'
+import { postCardToRoom } from './cards.ts'
+import { distDir, boardFile, exportsDir, assetsDir, defaultPort } from './config.ts'
 
-// 호스트 단일 프로세스: 정적 UI 서빙 + MCP(HTTP) + 브라우저 WS, 한 프로세스에서.
+// 호스트 단일 프로세스: 정적 UI + tldraw sync(/sync) + export 브리지(/ws) + MCP(HTTP) + assets.
+// 보드의 진실의 출처는 TLSocketRoom(서버 권위 store) — 영속·MCP 읽기·post_card 모두 room 기준.
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -23,6 +26,10 @@ const MIME: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
@@ -45,12 +52,18 @@ function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
   })
 }
 
+/** baseDir 밖으로 탈출하지 않는 안전한 파일 경로를 만든다. 탈출 시 null */
+function safeJoin(baseDir: string, rel: string): string | null {
+  const full = path.resolve(baseDir, '.' + (rel.startsWith('/') ? rel : `/${rel}`))
+  if (full !== baseDir && !full.startsWith(baseDir + path.sep)) return null
+  return full
+}
+
 /** dist/ 정적 파일 서빙 (SPA: 없는 경로는 index.html) */
 async function serveStatic(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
   const urlPath = decodeURIComponent((req.url || '/').split('?')[0])
-  let filePath = path.resolve(distDir, '.' + (urlPath === '/' ? '/index.html' : urlPath))
-  // 경로 탈출 방지: distDir 자신이거나 distDir/ 하위여야 함 ('dist-evil' 같은 형제 디렉토리 차단)
-  if (filePath !== distDir && !filePath.startsWith(distDir + path.sep)) {
+  let filePath = safeJoin(distDir, urlPath === '/' ? '/index.html' : urlPath)
+  if (!filePath) {
     res.writeHead(403).end('forbidden')
     return
   }
@@ -78,42 +91,41 @@ export interface RunningHost {
 }
 
 export async function startHost(
-  opts: { port?: number; boardFile?: string; exportsDir?: string } = {},
+  opts: { port?: number; boardFile?: string; exportsDir?: string; assetsDir?: string } = {},
 ): Promise<RunningHost> {
   const port = opts.port ?? defaultPort
   const boardFilePath = opts.boardFile ?? boardFile
   const exportsDirPath = opts.exportsDir ?? exportsDir
+  const assetsDirPath = opts.assetsDir ?? assetsDir
 
   const httpServer = http.createServer()
-  const wss = new WebSocketServer({ server: httpServer, path: WS_PATH })
-  const bridge = createWsBridge(wss)
 
-  // 시작 시 board 복원 → 브라우저 미연결이어도 list_area 등이 동작하도록 latest로 설정
-  const restored = await loadBoard(boardFilePath)
-  if (restored !== null) bridge.pushSnapshot(restored)
+  // 동기화 룸 (영속 포함)
+  const syncRoom = await createSyncRoom({ boardFile: boardFilePath })
 
-  // 스냅샷 수신 시 debounce 저장. 종료 시 flush 안 하면 마지막 편집이 유실되므로 pending을 추적.
-  let saveTimer: NodeJS.Timeout | null = null
-  let pendingSnapshot: unknown = null
-  let hasPending = false
-  async function flushSave(): Promise<void> {
-    if (saveTimer) {
-      clearTimeout(saveTimer)
-      saveTimer = null
+  // WS 2개: /sync(tldraw sync) + /ws(export 브리지) — noServer로 만들어 upgrade에서 직접 라우팅
+  const wssSync = new WebSocketServer({ noServer: true })
+  const wssBridge = new WebSocketServer({ noServer: true })
+  const bridge = createWsBridge(wssBridge)
+
+  httpServer.on('upgrade', (req, socket: Duplex, head) => {
+    const url = new URL(req.url || '/', 'http://localhost')
+    if (url.pathname === SYNC_PATH) {
+      const sessionId = url.searchParams.get('sessionId')
+      if (!sessionId) {
+        socket.destroy()
+        return
+      }
+      wssSync.handleUpgrade(req, socket, head, (ws) => {
+        syncRoom.room.handleSocketConnect({ sessionId, socket: ws })
+      })
+    } else if (url.pathname === WS_PATH) {
+      wssBridge.handleUpgrade(req, socket, head, (ws) => {
+        wssBridge.emit('connection', ws, req)
+      })
+    } else {
+      socket.destroy()
     }
-    if (!hasPending) return
-    hasPending = false
-    try {
-      await saveBoard(boardFilePath, pendingSnapshot)
-    } catch (e) {
-      console.error('board 저장 실패:', e)
-    }
-  }
-  bridge.onSnapshot((snapshot) => {
-    pendingSnapshot = snapshot
-    hasPending = true
-    if (saveTimer) clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => void flushSave(), 500)
   })
 
   // MCP는 stateful Streamable HTTP: 세션별 transport 보관
@@ -131,9 +143,48 @@ export async function startHost(
       }
       return
     }
+
+    if (url.startsWith(ASSETS_PATH + '/')) {
+      await handleAssets(req, res, decodeURIComponent(url.slice(ASSETS_PATH.length)))
+      return
+    }
+
     // 나머지는 정적 UI
     await serveStatic(req, res)
   })
+
+  /** 이미지 등 asset 업로드(PUT)/서빙(GET) — .board/assets/ */
+  async function handleAssets(req: http.IncomingMessage, res: http.ServerResponse, rel: string): Promise<void> {
+    const filePath = safeJoin(assetsDirPath, rel)
+    if (!filePath) {
+      res.writeHead(403).end('forbidden')
+      return
+    }
+    if (req.method === 'PUT' || req.method === 'POST') {
+      await fsp.mkdir(path.dirname(filePath), { recursive: true })
+      const out = fs.createWriteStream(filePath)
+      req.pipe(out)
+      await new Promise<void>((resolve, reject) => {
+        out.on('finish', resolve)
+        out.on('error', reject)
+        req.on('error', reject)
+      })
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: true }))
+      return
+    }
+    if (req.method === 'GET') {
+      const stat = await fsp.stat(filePath).catch(() => null)
+      if (!stat || stat.isDirectory()) {
+        res.writeHead(404).end('not found')
+        return
+      }
+      const ext = path.extname(filePath).toLowerCase()
+      res.writeHead(200, { 'content-type': MIME[ext] || 'application/octet-stream' })
+      fs.createReadStream(filePath).pipe(res)
+      return
+    }
+    res.writeHead(405).end('method not allowed')
+  }
 
   async function handleMcp(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const sessionId = req.headers['mcp-session-id'] as string | undefined
@@ -155,7 +206,8 @@ export async function startHost(
         }
         const server = buildMcpServer({
           bridge,
-          readPersisted: () => loadBoard(boardFilePath),
+          getSnapshot: () => roomToAreasInput(syncRoom.room.getCurrentSnapshot()),
+          postCard: (areaId, markdown) => postCardToRoom(syncRoom.room, areaId, markdown),
           exportsDir: exportsDirPath,
         })
         await server.connect(transport)
@@ -186,18 +238,13 @@ export async function startHost(
   }
 
   await new Promise<void>((resolve, reject) => {
-    // listen 에러(EADDRINUSE 등)는 httpServer뿐 아니라 wss(server를 감쌈)에서도 재emit된다.
-    // 둘 다 핸들링하지 않으면 unhandled 'error'로 프로세스가 크래시한다.
     const onError = (err: Error) => {
       httpServer.off('error', onError)
-      wss.off('error', onError)
       reject(err)
     }
     httpServer.once('error', onError)
-    wss.once('error', onError)
     httpServer.listen(port, () => {
       httpServer.off('error', onError)
-      wss.off('error', onError)
       resolve()
     })
   })
@@ -206,8 +253,9 @@ export async function startHost(
   return {
     port: actualPort,
     close: async () => {
-      await flushSave() // 종료 전 대기 중인 마지막 편집을 저장 (유실 방지)
-      wss.close()
+      await syncRoom.close() // flush 후 room 종료 (유실 방지)
+      wssSync.close()
+      wssBridge.close()
       // keep-alive MCP 연결이 남아 close가 무기한 대기하지 않도록 강제 종료
       httpServer.closeAllConnections()
       await new Promise<void>((resolve) => httpServer.close(() => resolve()))
@@ -223,6 +271,7 @@ if (invokedDirectly) {
     .then((h) => {
       console.log(`canvas-forge host 기동: http://localhost:${h.port}`)
       console.log(`  보드 UI:  http://localhost:${h.port}  (먼저 npm run build 필요)`)
+      console.log(`  초대:     같은 네트워크에서 http://<호스트IP>:${h.port}`)
       console.log(`  MCP:      http://localhost:${h.port}${MCP_PATH}`)
       console.log(`  등록:     claude mcp add --transport http canvas-forge http://localhost:${h.port}${MCP_PATH}`)
 

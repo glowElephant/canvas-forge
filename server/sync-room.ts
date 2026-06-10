@@ -1,6 +1,9 @@
 import { TLSocketRoom, type RoomSnapshot } from '@tldraw/sync-core'
-import { createTLSchema, defaultShapeSchemas, defaultBindingSchemas } from '@tldraw/tlschema'
+import { createTLSchema, defaultShapeSchemas, defaultBindingSchemas, type TLRecord } from '@tldraw/tlschema'
 import { loadBoard, saveBoard } from './board.ts'
+
+/** 이 프로젝트에서 쓰는 room 타입 (기본 tldraw 레코드, 세션 메타 없음) */
+export type BoardRoom = TLSocketRoom<TLRecord, void>
 
 // 서버 권위 동기화 룸. board.json 영속(debounce+flush)과 마이그레이션 로드를 담당.
 // board.json 형식 2종 겸용:
@@ -8,7 +11,7 @@ import { loadBoard, saveBoard } from './board.ts'
 //  - 레거시: TLEditorSnapshot { document: { store }, session }  (MVP1 형식 → document를 initialSnapshot으로)
 
 export interface SyncRoomHandle {
-  room: TLSocketRoom
+  room: BoardRoom
   /** 대기 중인 저장을 즉시 디스크에 반영 (종료 전 호출 — 유실 방지) */
   flushSave(): Promise<void>
   /** flush 후 룸 종료 */
@@ -40,7 +43,7 @@ export async function createSyncRoom(opts: { boardFile: string }): Promise<SyncR
   let saveTimer: NodeJS.Timeout | null = null
   let dirty = false
 
-  const room: TLSocketRoom = new TLSocketRoom({
+  const room: BoardRoom = new TLSocketRoom<TLRecord, void>({
     schema: createTLSchema({ shapes: defaultShapeSchemas, bindings: defaultBindingSchemas }),
     ...(initialSnapshot ? { initialSnapshot: initialSnapshot as RoomSnapshot } : {}),
     onDataChange() {

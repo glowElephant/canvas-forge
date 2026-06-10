@@ -7,47 +7,32 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { startHost, type RunningHost } from '../host.ts'
 import type { ClientMsg, ServerMsg } from '../../shared/protocol.ts'
+import { legacyBoardFixture } from './fixtures.ts'
 
-// 1x1 투명 PNG (mock 브라우저가 export 응답으로 돌려줄 가짜 이미지)
+// MCP 전체 루프 e2e (MVP2):
+// 보드는 board.json(레거시 형식 마이그레이션 포함)으로 시드 → room이 진실의 출처.
+// mock 브라우저는 /ws에 붙어 export 요청에만 PNG로 응답한다 (동기화는 /sync 몫 — 여기선 불필요).
+
 const TINY_PNG_B64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
-
-function richText(text: string) {
-  return { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] }
-}
-
-const snapshot = {
-  document: {
-    store: {
-      'page:p1': { id: 'page:p1', typeName: 'page', name: 'Page 1' },
-      'shape:frame1': {
-        id: 'shape:frame1', typeName: 'shape', type: 'frame', parentId: 'page:p1',
-        props: { name: '로그인 화면', w: 400, h: 300 },
-      },
-      'shape:t1': {
-        id: 'shape:t1', typeName: 'shape', type: 'text', parentId: 'shape:frame1',
-        props: { richText: richText('이메일과 비밀번호') },
-      },
-    },
-  },
-  session: {},
-}
 
 let host: RunningHost
 let browser: WebSocket
 let tmpDir: string
-const postedCards: Array<{ areaId: string; markdown: string }> = []
 
 beforeAll(async () => {
-  // 실제 .board를 오염시키지 않도록 temp 디렉토리로 격리
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cf-e2e-'))
+  const boardFile = path.join(tmpDir, 'board.json')
+  await fs.writeFile(boardFile, JSON.stringify(legacyBoardFixture()), 'utf8')
+
   host = await startHost({
     port: 0,
-    boardFile: path.join(tmpDir, 'board.json'),
+    boardFile,
     exportsDir: path.join(tmpDir, 'exports'),
+    assetsDir: path.join(tmpDir, 'assets'),
   })
 
-  // mock 브라우저: WS 접속 → 스냅샷 전송 → requestExport에 PNG 응답, postCard 기록
+  // mock 브라우저: /ws 접속 → requestExport에 PNG 응답
   browser = new WebSocket(`ws://localhost:${host.port}/ws`)
   await new Promise<void>((resolve, reject) => {
     browser.on('open', resolve)
@@ -58,14 +43,8 @@ beforeAll(async () => {
     if (msg.t === 'requestExport') {
       const reply: ClientMsg = { t: 'exportResult', reqId: msg.reqId, pngBase64: TINY_PNG_B64 }
       browser.send(JSON.stringify(reply))
-    } else if (msg.t === 'postCard') {
-      postedCards.push({ areaId: msg.areaId, markdown: msg.markdown })
     }
   })
-  const snap: ClientMsg = { t: 'snapshot', snapshot }
-  browser.send(JSON.stringify(snap))
-  // 서버가 스냅샷을 처리할 시간
-  await new Promise((r) => setTimeout(r, 200))
 })
 
 afterAll(async () => {
@@ -80,7 +59,7 @@ async function mcpClient(): Promise<Client> {
   return client
 }
 
-describe('MCP e2e (mock 브라우저 WS)', () => {
+describe('MCP e2e (room 기반)', () => {
   it('tools/list에 3도구가 노출된다', async () => {
     const client = await mcpClient()
     const { tools } = await client.listTools()
@@ -89,7 +68,7 @@ describe('MCP e2e (mock 브라우저 WS)', () => {
     await client.close()
   })
 
-  it('list_areas가 프레임 영역을 반환한다', async () => {
+  it('list_areas가 시드된 프레임 영역을 반환한다 (레거시 마이그레이션 경유)', async () => {
     const client = await mcpClient()
     const res = await client.callTool({ name: 'list_areas', arguments: {} })
     const text = (res.content as Array<{ type: string; text?: string }>)
@@ -112,16 +91,13 @@ describe('MCP e2e (mock 브라우저 WS)', () => {
     await client.close()
   })
 
-  it('post_card가 mock 브라우저에 카드를 push 한다', async () => {
+  it('post_card가 서버측 쓰기로 성공한다 (sync로 전 클라이언트 전파)', async () => {
     const client = await mcpClient()
     const res = await client.callTool({
       name: 'post_card',
       arguments: { area_id: 'shape:frame1', markdown: '# 정리\n- 이메일 로그인' },
     })
     expect(res.isError).toBeFalsy()
-    // push는 비동기 — 잠깐 대기
-    await new Promise((r) => setTimeout(r, 100))
-    expect(postedCards.some((c) => c.areaId === 'shape:frame1' && c.markdown.includes('이메일 로그인'))).toBe(true)
     await client.close()
   })
 })
