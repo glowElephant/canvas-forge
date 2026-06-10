@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useEditor } from 'tldraw'
-import { isImeComposingEnter } from './ime'
+import { useImeSafeEnter } from './ime'
 import type { BridgeHandle } from './ws-client'
 
 // 커서 채팅 (요청 스펙):
@@ -97,12 +97,15 @@ export function CursorChat({ bridge, user }: { bridge: BridgeHandle; user: { id:
     return () => cancelAnimationFrame(raf)
   }, [editor])
 
-  const commit = (text: string) => {
-    const trimmed = text.trim()
-    if (!trimmed) return
-    // 로컬 에코(onCursorChat)로 내 말풍선도 갱신되므로 여기서 직접 push하지 않는다
-    bridge.sendCursorChat({ userId: user.id, name: user.name, color: user.color, text: trimmed })
-  }
+  // 로컬 에코(onCursorChat)로 내 말풍선도 갱신되므로 여기서 직접 push하지 않는다
+  const enterHandlers = useImeSafeEnter(
+    (value) => {
+      bridge.sendCursorChat({ userId: user.id, name: user.name, color: user.color, text: value.trim() })
+    },
+    (e) => {
+      if (e.key === 'Escape') setInputOpen(false)
+    },
+  )
 
   const ownStack = stacks[user.id]
   const remoteIds = Object.keys(stacks).filter((id) => id !== user.id && stacks[id].lines.length > 0)
@@ -120,15 +123,7 @@ export function CursorChat({ bridge, user }: { bridge: BridgeHandle; user: { id:
           <input
             ref={inputRef}
             placeholder="채팅… (Enter 전송, Esc 닫기)"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !isImeComposingEnter(e)) {
-                commit((e.target as HTMLInputElement).value)
-                ;(e.target as HTMLInputElement).value = ''
-              } else if (e.key === 'Escape') {
-                setInputOpen(false)
-              }
-              e.stopPropagation()
-            }}
+            {...enterHandlers}
             onBlur={() => setInputOpen(false)}
             style={{
               pointerEvents: 'auto', marginTop: 2, padding: '3px 8px', width: 180,

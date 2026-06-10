@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CursorChatMsg } from '../shared/protocol'
-import { isImeComposingEnter } from './ime'
+import { useImeSafeEnter } from './ime'
 import type { BridgeHandle } from './ws-client'
 import { useDrag } from './useDrag'
 
@@ -38,12 +38,9 @@ export function ChatPanel({ bridge, user }: { bridge: BridgeHandle; user: { id: 
     if (el) el.scrollTop = el.scrollHeight
   }, [items, open])
 
-  const send = (input: HTMLInputElement) => {
-    const text = input.value.trim()
-    if (!text) return
-    bridge.sendCursorChat({ userId: user.id, name: user.name, color: user.color, text })
-    input.value = ''
-  }
+  const enterHandlers = useImeSafeEnter((value) => {
+    bridge.sendCursorChat({ userId: user.id, name: user.name, color: user.color, text: value.trim() })
+  })
 
   return (
     <div
@@ -89,10 +86,7 @@ export function ChatPanel({ bridge, user }: { bridge: BridgeHandle; user: { id: 
           <div style={{ padding: 8, borderTop: '1px solid #e9ecef' }}>
             <input
               placeholder="메시지 입력… (Enter 전송)"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !isImeComposingEnter(e)) send(e.target as HTMLInputElement)
-                e.stopPropagation()
-              }}
+              {...enterHandlers}
               style={{ width: '100%', boxSizing: 'border-box', padding: '6px 8px', border: '1px solid #ced4da', borderRadius: 6, font: 'inherit' }}
             />
           </div>

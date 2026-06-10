@@ -115,6 +115,7 @@ function Panel({ shape }: { shape: TLShape }) {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && !isImeComposingEnter(e) && submit()}
+          onKeyUp={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && submit()}
           placeholder="댓글 입력…"
           style={{ padding: '6px 8px', border: '1px solid #ced4da', borderRadius: 6, font: 'inherit' }}
         />

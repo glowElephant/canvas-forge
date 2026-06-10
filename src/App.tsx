@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Tldraw, type Editor, type TLAssetStore } from 'tldraw'
 import { useSync } from '@tldraw/sync'
 import 'tldraw/tldraw.css'
@@ -109,9 +109,11 @@ function Center({ children }: { children: React.ReactNode }) {
 /** 첫 접속 시 이름 1회 입력 (localStorage 저장, 색은 자동) */
 function NameGate({ onDone }: { onDone: (u: UserInfo) => void }) {
   const [name, setName] = useState('')
+  const done = useRef(false) // keydown+keyup 폴백으로 이중 제출 방지
   const submit = () => {
     const trimmed = name.trim()
-    if (!trimmed) return
+    if (!trimmed || done.current) return
+    done.current = true
     const user: UserInfo = {
       id: crypto.randomUUID(),
       name: trimmed,
@@ -130,6 +132,7 @@ function NameGate({ onDone }: { onDone: (u: UserInfo) => void }) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && !isImeComposingEnter(e) && submit()}
+          onKeyUp={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && submit()}
           placeholder="이름"
           style={{ padding: '8px 10px', fontSize: 14, border: '1px solid #ccc', borderRadius: 6 }}
         />
