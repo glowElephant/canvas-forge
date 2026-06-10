@@ -34,7 +34,7 @@
 
 **구조 (보드의 진실의 출처 = 서버의 `TLSocketRoom`):**
 - `shared/protocol.ts` — `/ws` export 브리지 메시지 타입 + 경로 상수(`SYNC_PATH`/`WS_PATH`/`MCP_PATH`/`ASSETS_PATH`) 단일 출처.
-- `server/` — `config.ts`(경로/포트, 절대경로 금지), `sync-room.ts`(**TLSocketRoom 생성 + board.json 영속·마이그레이션 + `roomToAreasInput`**), `cards.ts`(post_card 서버측 쓰기), `board.ts`(파일 r/w), `areas.ts`(스냅샷→list/read, **순수 함수**), `ws-bridge.ts`(export 전용), `mcp.ts`(3도구, room에서 읽음), `host.ts`(엔트리: 정적 + `/sync` + `/ws` + `/mcp` + `/uploads` 한 프로세스).
+- `server/` — `config.ts`(경로/포트, 절대경로 금지), `sync-room.ts`(**TLSocketRoom 생성 + board.json 영속·마이그레이션 + `roomToAreasInput`**), `cards.ts`(post_card 서버측 쓰기), `board.ts`(파일 r/w), `areas.ts`(스냅샷→list/read, **순수 함수**), `ws-bridge.ts`(export 전용), `mcp.ts`(3도구, room에서 읽음), `host.ts`(엔트리: 정적 + `/sync` + `/ws` + `/mcp` + `/uploads` + `/api/invite`(LAN 초대 URL) 한 프로세스).
 - `src/` — `App.tsx`(이름 게이트→`useSync`→`<Tldraw store>`), `ws-client.ts`(export 응답 전용, 자동 재연결).
 
 **재발견 방지 — 검증된 사실(설치본 기준):**

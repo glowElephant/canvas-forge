@@ -1,4 +1,5 @@
 import http from 'node:http'
+import os from 'node:os'
 import type { AddressInfo } from 'node:net'
 import type { Duplex } from 'node:stream'
 import fs from 'node:fs'
@@ -50,6 +51,23 @@ function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
     })
     req.on('error', reject)
   })
+}
+
+/** LAN에서 접속 가능한 초대 URL 목록 (IPv4, 루프백 제외). 첫 항목이 가장 유력한 후보 */
+export function getInviteUrls(port: number): string[] {
+  const urls: string[] = []
+  for (const ifaces of Object.values(os.networkInterfaces())) {
+    for (const iface of ifaces ?? []) {
+      if (iface.family !== 'IPv4' || iface.internal) continue
+      urls.push(`http://${iface.address}:${port}`)
+    }
+  }
+  // 사설망 대역(공유기 환경)을 앞으로 — 게스트가 실제로 닿을 가능성이 높은 주소
+  return urls.sort((a, b) => Number(privateRank(b)) - Number(privateRank(a)))
+}
+
+function privateRank(url: string): boolean {
+  return /\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(url)
 }
 
 /** baseDir 밖으로 탈출하지 않는 안전한 파일 경로를 만든다. 탈출 시 null */
@@ -146,6 +164,15 @@ export async function startHost(
 
     if (url.startsWith(ASSETS_PATH + '/')) {
       await handleAssets(req, res, decodeURIComponent(url.slice(ASSETS_PATH.length)))
+      return
+    }
+
+    // 초대 링크 (UI의 "초대 링크 복사" 버튼이 사용)
+    if (url === '/api/invite') {
+      const p = (httpServer.address() as AddressInfo).port
+      res.writeHead(200, { 'content-type': 'application/json' }).end(
+        JSON.stringify({ urls: getInviteUrls(p) }),
+      )
       return
     }
 
@@ -271,7 +298,13 @@ if (invokedDirectly) {
     .then((h) => {
       console.log(`canvas-forge host 기동: http://localhost:${h.port}`)
       console.log(`  보드 UI:  http://localhost:${h.port}  (먼저 npm run build 필요)`)
-      console.log(`  초대:     같은 네트워크에서 http://<호스트IP>:${h.port}`)
+      const invites = getInviteUrls(h.port)
+      if (invites.length > 0) {
+        console.log(`  초대:     같은 네트워크 사람에게 이 링크를 주세요 → ${invites[0]}`)
+        for (const extra of invites.slice(1)) console.log(`            (다른 네트워크 인터페이스: ${extra})`)
+      } else {
+        console.log(`  초대:     LAN IP를 찾지 못함 — ipconfig로 확인 후 http://<IP>:${h.port}`)
+      }
       console.log(`  MCP:      http://localhost:${h.port}${MCP_PATH}`)
       console.log(`  등록:     claude mcp add --transport http canvas-forge http://localhost:${h.port}${MCP_PATH}`)
 

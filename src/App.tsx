@@ -68,7 +68,7 @@ function Board({ user }: { user: UserInfo }) {
   return (
     <div style={{ position: 'fixed', inset: 0 }}>
       <Tldraw store={store.store} onMount={handleMount} />
-      <ConnectionBadge online={store.connectionStatus === 'online'} />
+      <TopBar online={store.connectionStatus === 'online'} />
     </div>
   )
 }
@@ -120,7 +120,8 @@ function NameGate({ onDone }: { onDone: (u: UserInfo) => void }) {
   )
 }
 
-function ConnectionBadge({ online }: { online: boolean }) {
+/** 상단 가운데: 동기화 상태 배지 + 초대 링크 복사 버튼 */
+function TopBar({ online }: { online: boolean }) {
   return (
     <div
       style={{
@@ -129,20 +130,89 @@ function ConnectionBadge({ online }: { online: boolean }) {
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 1000,
-        pointerEvents: 'none',
         display: 'flex',
         alignItems: 'center',
-        gap: 6,
-        padding: '4px 10px',
-        borderRadius: 999,
-        background: 'rgba(255,255,255,0.92)',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+        gap: 8,
         font: '12px/1.4 system-ui, sans-serif',
-        color: '#111',
       }}
     >
-      <span style={{ width: 8, height: 8, borderRadius: 999, background: online ? '#16a34a' : '#dc2626' }} />
-      {online ? '실시간 동기화 중' : '연결 끊김 — 재연결 시도 중'}
+      <div
+        style={{
+          pointerEvents: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '4px 10px',
+          borderRadius: 999,
+          background: 'rgba(255,255,255,0.92)',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+          color: '#111',
+        }}
+      >
+        <span style={{ width: 8, height: 8, borderRadius: 999, background: online ? '#16a34a' : '#dc2626' }} />
+        {online ? '실시간 동기화 중' : '연결 끊김 — 재연결 시도 중'}
+      </div>
+      <InviteButton />
     </div>
   )
+}
+
+function InviteButton() {
+  const [label, setLabel] = useState('초대 링크 복사')
+
+  const copy = useCallback(async () => {
+    try {
+      const res = await fetch('/api/invite')
+      const { urls } = (await res.json()) as { urls: string[] }
+      const url = urls[0]
+      if (!url) {
+        setLabel('LAN IP 못 찾음')
+        setTimeout(() => setLabel('초대 링크 복사'), 2000)
+        return
+      }
+      await copyText(url)
+      setLabel('복사됨!')
+      setTimeout(() => setLabel('초대 링크 복사'), 2000)
+    } catch {
+      setLabel('복사 실패')
+      setTimeout(() => setLabel('초대 링크 복사'), 2000)
+    }
+  }, [])
+
+  return (
+    <button
+      onClick={copy}
+      style={{
+        padding: '4px 10px',
+        borderRadius: 999,
+        border: 'none',
+        background: '#1971c2',
+        color: '#fff',
+        cursor: 'pointer',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+        font: 'inherit',
+      }}
+    >
+      {label}
+    </button>
+  )
+}
+
+/** clipboard API는 https/localhost 전용 — LAN(http://192.168...) 게스트는 textarea 폴백 */
+async function copyText(text: string): Promise<void> {
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+  const ta = document.createElement('textarea')
+  ta.value = text
+  ta.style.position = 'fixed'
+  ta.style.opacity = '0'
+  document.body.appendChild(ta)
+  ta.select()
+  try {
+    if (!document.execCommand('copy')) throw new Error('execCommand 실패')
+  } finally {
+    document.body.removeChild(ta)
+  }
 }

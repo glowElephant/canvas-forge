@@ -29,4 +29,14 @@ describe('정적 서빙 경로 탈출 방어', () => {
     expect(res.status).toBe(403)
     expect(res.body).not.toContain('"name": "canvas-forge"') // 실제 파일 내용 노출 안 됨
   })
+
+  it('/api/invite가 초대 URL 목록을 반환한다', async () => {
+    host = await startHost({ port: 0 })
+    const res = await get(host.port, '/api/invite')
+    expect(res.status).toBe(200)
+    const { urls } = JSON.parse(res.body) as { urls: string[] }
+    expect(Array.isArray(urls)).toBe(true)
+    // LAN IP가 있는 머신이면 http://x.x.x.x:port 형태여야 한다
+    for (const u of urls) expect(u).toMatch(new RegExp(`^http://\\d+\\.\\d+\\.\\d+\\.\\d+:${host.port}$`))
+  })
 })
