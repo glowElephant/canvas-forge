@@ -7,8 +7,12 @@ import { connectExportBridge, type BridgeHandle } from './ws-client'
 import { CursorChat } from './CursorChat'
 import { ExternalHandlers } from './external'
 import { AreaPanel } from './AreaPanel'
+import { FixedContextMenu } from './FixedContextMenu'
 import { VideoCommentPanel } from './VideoCommentPanel'
 import { embedDefinitions } from './embeds'
+
+// 컨텍스트 메뉴 재오픈 버그 우회 (FixedContextMenu 주석 참고)
+const components = { ContextMenu: FixedContextMenu }
 
 // 보드앱: tldraw 무한 캔버스 + 호스트 허브 실시간 동기화(@tldraw/sync).
 // Claude 없이도 N명이 같이 쓰는 화이트보드로 완전히 동작한다.
@@ -80,7 +84,7 @@ function Board({ user }: { user: UserInfo }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0 }}>
-      <Tldraw store={store.store} onMount={handleMount} embeds={embedDefinitions}>
+      <Tldraw store={store.store} onMount={handleMount} embeds={embedDefinitions} components={components}>
         <ExternalHandlers />
         <AreaPanel />
         <VideoCommentPanel />

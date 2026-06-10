@@ -58,6 +58,8 @@
 - **영역 지정(★)**: AreaPanel 🤖 토글 → frame `meta.cfClaudePick` → `list_areas`에 ★ 표시 + "지정 영역 우선" 안내. 사용자가 영역 안 정하고 "보드 봐줘" 하면 Claude는 ★부터 본다.
 - **커서 채팅**: `/`로 입력창, 엔터마다 한 줄(로그처럼 쌓임), 줄별 5.4s 후 페이드아웃. 릴레이는 `/ws` 브리지 브로드캐스트(`cursorChat`, 보낸 사람 제외) — sync/presence와 무관, 영속 안 됨(의도). 패널들은 `useDrag`로 이동 가능(우상단은 tldraw 스타일 패널과 겹치므로 기본 좌측).
 - 검증 스크립트 추가: `scripts/verify-chat.mjs`(실 키입력 송신→릴레이→DOM 표시→페이드아웃).
+- **tldraw 3.15 컨텍스트 메뉴 버그(상류, 순정에서도 재현)**: 우클릭 메뉴를 "바깥 클릭"으로 닫으면 tldraw가 콘텐츠를 먼저 언마운트해 Radix 내부 open=true가 남음 → 이후 우클릭 전부 no-op (Escape 닫기는 정상). 우회: `src/FixedContextMenu.tsx` — 닫힘 transition마다 `DefaultContextMenu`를 key로 리마운트, `<Tldraw components={{ContextMenu: FixedContextMenu}}>`. 메뉴 열림 감지는 `editor.menus.isMenuOpen(\`context menu-${'$'}{editor.contextId}\`)`.
+- 진단용 순정 tldraw 페이지: `/stock.html`(vite 멀티 엔트리, `src/stock-main.tsx`) — "우리 코드 vs tldraw 자체" 버그 격리용. 빌드에 포함되지만 링크 안 됨.
 - 영속은 debounce(500ms) — 종료 유실 막으려 `close()`가 flush를 await, 직접 실행 시 SIGINT/SIGTERM도 flush 후 종료. `closeAllConnections()`로 keep-alive MCP 연결 강제 종료(안 하면 종료 무기한 대기).
 - `startHost({ port, boardFile, exportsDir, assetsDir })` — 경로 주입 가능. 테스트는 temp 디렉토리로 격리(실제 `.board` 오염 금지).
 - 검증: `server/__tests__/` 19개(테스트: sync-room 마이그레이션·post_card / mcp.e2e / persistence-flush / degraded-mode / static-guard / board / areas). 실 브라우저 검증 스크린샷: `docs/superpowers/mvp1-loop-verified.png`, `mvp2-collab-verified.png`.
