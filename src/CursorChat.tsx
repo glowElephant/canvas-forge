@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useEditor } from 'tldraw'
+import { isImeComposingEnter } from './ime'
 import type { BridgeHandle } from './ws-client'
 
 // 커서 채팅 (요청 스펙):
@@ -99,7 +100,7 @@ export function CursorChat({ bridge, user }: { bridge: BridgeHandle; user: { id:
   const commit = (text: string) => {
     const trimmed = text.trim()
     if (!trimmed) return
-    pushLine(user.id, user.name, user.color, trimmed)
+    // 로컬 에코(onCursorChat)로 내 말풍선도 갱신되므로 여기서 직접 push하지 않는다
     bridge.sendCursorChat({ userId: user.id, name: user.name, color: user.color, text: trimmed })
   }
 
@@ -120,7 +121,7 @@ export function CursorChat({ bridge, user }: { bridge: BridgeHandle; user: { id:
             ref={inputRef}
             placeholder="채팅… (Enter 전송, Esc 닫기)"
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+              if (e.key === 'Enter' && !isImeComposingEnter(e)) {
                 commit((e.target as HTMLInputElement).value)
                 ;(e.target as HTMLInputElement).value = ''
               } else if (e.key === 'Escape') {

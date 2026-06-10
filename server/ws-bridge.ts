@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import type { WebSocket, WebSocketServer } from 'ws'
-import type { ClientMsg, ServerMsg } from '../shared/protocol.ts'
+import type { ClientMsg, CursorChatMsg, ServerMsg } from '../shared/protocol.ts'
 
-// 브라우저(보드앱)와의 export 브리지. tldraw PNG 렌더는 브라우저에서만 가능하므로
-// read_area의 스크린샷 요청을 연결된 탭 하나에 위임한다.
+// 브라우저(보드앱)와의 export 브리지 + 채팅 릴레이/히스토리.
+// tldraw PNG 렌더는 브라우저에서만 가능하므로 read_area의 스크린샷 요청을 연결된 탭 하나에 위임한다.
 // 보드 동기화는 /sync(TLSocketRoom) 몫 — 여기서는 다루지 않는다.
+
+const CHAT_HISTORY_MAX = 500
 
 export interface WsBridge {
   /** export를 처리해줄 브라우저 연결 존재 여부 */
@@ -15,13 +17,25 @@ export interface WsBridge {
   requestVideoFrame(shapeId: string, time: number, timeoutMs?: number): Promise<Buffer>
 }
 
-export function createWsBridge(wss: WebSocketServer): WsBridge {
+export interface WsBridgeOpts {
+  /** 시작 시 복원할 채팅 히스토리 */
+  initialChat?: CursorChatMsg[]
+  /** 채팅 수신 시 호출 (영속 저장용) */
+  onChat?(history: CursorChatMsg[]): void
+}
+
+export function createWsBridge(wss: WebSocketServer, opts: WsBridgeOpts = {}): WsBridge {
   // 연결된 탭들 중 가장 최근 것을 우선 사용 (아무 탭이나 export 가능)
   const clients = new Set<WebSocket>()
   const pending = new Map<string, { resolve: (b: Buffer) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }>()
+  const chatHistory: CursorChatMsg[] = [...(opts.initialChat ?? [])]
 
   wss.on('connection', (ws: WebSocket) => {
     clients.add(ws)
+    // 누적 채팅 히스토리 전달 (늦게 들어온 참여자도 이전 대화를 봄)
+    if (chatHistory.length > 0) {
+      ws.send(JSON.stringify({ t: 'chatHistory', items: chatHistory } satisfies ServerMsg))
+    }
 
     ws.on('message', (data) => {
       let msg: ClientMsg
@@ -30,9 +44,13 @@ export function createWsBridge(wss: WebSocketServer): WsBridge {
       } catch {
         return
       }
-      // 커서 채팅: 보낸 사람 제외 전원에게 릴레이
+      // 채팅: 서버가 ts 스탬프 → 히스토리 적재 → 보낸 사람 제외 전원에게 릴레이
       if (msg.t === 'cursorChat') {
-        const payload = JSON.stringify(msg)
+        const stamped: CursorChatMsg = { ...msg, ts: Date.now() }
+        chatHistory.push(stamped)
+        if (chatHistory.length > CHAT_HISTORY_MAX) chatHistory.splice(0, chatHistory.length - CHAT_HISTORY_MAX)
+        opts.onChat?.(chatHistory)
+        const payload = JSON.stringify(stamped)
         for (const other of clients) {
           if (other !== ws && other.readyState === other.OPEN) other.send(payload)
         }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useEditor, useValue, type TLShape } from 'tldraw'
 import type { VideoComment } from '../server/modalities'
+import { isImeComposingEnter } from './ime'
 import { useDrag } from './useDrag'
 
 // 영상 댓글 패널 (MVP3c): 영상 shape를 선택하면 표시.
@@ -113,7 +114,7 @@ function Panel({ shape }: { shape: TLShape }) {
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && submit()}
+          onKeyDown={(e) => e.key === 'Enter' && !isImeComposingEnter(e) && submit()}
           placeholder="댓글 입력…"
           style={{ padding: '6px 8px', border: '1px solid #ced4da', borderRadius: 6, font: 'inherit' }}
         />

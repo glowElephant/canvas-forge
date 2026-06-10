@@ -8,10 +8,12 @@ import { WS_PATH } from '../shared/protocol'
 
 export interface BridgeHandle {
   dispose(): void
-  /** 내 커서 채팅 한 줄을 다른 참여자에게 전송 */
-  sendCursorChat(msg: Omit<CursorChatMsg, 't'>): void
-  /** 다른 참여자의 커서 채팅 수신 콜백 */
+  /** 채팅 한 줄 전송 — 커서 말풍선과 우측 채팅 패널이 같은 스트림을 공유. 로컬에도 즉시 에코됨 */
+  sendCursorChat(msg: Omit<CursorChatMsg, 't' | 'id' | 'ts'>): void
+  /** 라이브 채팅 수신 콜백 (내가 보낸 것 포함 — 로컬 에코) */
   onCursorChat(cb: (msg: CursorChatMsg) => void): void
+  /** 연결 시 서버가 보내는 누적 히스토리 콜백 */
+  onChatHistory(cb: (items: CursorChatMsg[]) => void): void
 }
 
 export function connectExportBridge(editor: Editor): BridgeHandle {
@@ -22,6 +24,7 @@ export function connectExportBridge(editor: Editor): BridgeHandle {
   let retry = 0
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   const chatCbs: Array<(m: CursorChatMsg) => void> = []
+  const historyCbs: Array<(items: CursorChatMsg[]) => void> = []
 
   const send = (m: ClientMsg) => {
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m))
@@ -47,6 +50,8 @@ export function connectExportBridge(editor: Editor): BridgeHandle {
         await handleVideoFrame(editor, msg.shapeId, msg.time, msg.reqId, send)
       } else if (msg.t === 'cursorChat') {
         for (const cb of chatCbs) cb(msg)
+      } else if (msg.t === 'chatHistory') {
+        for (const cb of historyCbs) cb(msg.items)
       }
     }
 
@@ -71,10 +76,16 @@ export function connectExportBridge(editor: Editor): BridgeHandle {
       ws?.close()
     },
     sendCursorChat(msg) {
-      send({ t: 'cursorChat', ...msg })
+      const full: CursorChatMsg = { t: 'cursorChat', id: crypto.randomUUID(), ts: Date.now(), ...msg }
+      send(full)
+      // 로컬 에코 — 보낸 사람의 말풍선/패널도 같은 경로로 갱신 (UI 이원화 방지)
+      for (const cb of chatCbs) cb(full)
     },
     onCursorChat(cb) {
       chatCbs.push(cb)
+    },
+    onChatHistory(cb) {
+      historyCbs.push(cb)
     },
   }
 }

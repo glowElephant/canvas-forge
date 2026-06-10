@@ -56,7 +56,8 @@
 - 영상 댓글 UI(`VideoCommentPanel`)는 보드 DOM의 `[data-shape-id] video`에서 currentTime을 읽는다. shape `meta`에 배열을 쓸 땐 `JsonArray` 캐스트 필요.
 - **시간 순서**: 모든 새 shape에 `editor.getInitialMetaForShape = () => ({createdAt, createdBy})` (App onMount) → `readArea`가 createdAt 오름차순 정렬 + `[HH:MM 작성자]` 라벨, modalities도 같은 순서. 레거시(createdAt 없음)는 맨 앞. Claude instructions에 "시간 순서대로 이해, 충돌 시 최신 우선" 규칙 포함.
 - **영역 지정(★)**: AreaPanel 🤖 토글 → frame `meta.cfClaudePick` → `list_areas`에 ★ 표시 + "지정 영역 우선" 안내. 사용자가 영역 안 정하고 "보드 봐줘" 하면 Claude는 ★부터 본다.
-- **커서 채팅**: `/`로 입력창, 엔터마다 한 줄(로그처럼 쌓임), 줄별 5.4s 후 페이드아웃. 릴레이는 `/ws` 브리지 브로드캐스트(`cursorChat`, 보낸 사람 제외) — sync/presence와 무관, 영속 안 됨(의도). 패널들은 `useDrag`로 이동 가능(우상단은 tldraw 스타일 패널과 겹치므로 기본 좌측).
+- **채팅(커서+패널 단일 스트림)**: `/`=커서 말풍선(줄별 9s 페이드아웃, 유저당 6줄), `ChatPanel`=누적 로그. 같은 `cursorChat` 스트림 — 송신은 `BridgeHandle.sendCursorChat`이 **로컬 에코**(chatCbs에 즉시 dispatch)해서 양쪽 UI가 한 경로로 갱신. 서버(`ws-bridge`)가 ts 스탬프+히스토리(500개 cap) 보관, 연결 시 `chatHistory` 1회 전송, host가 `.board/chat.json`에 debounce 영속+종료 flush. CursorChat은 라이브만 구독(히스토리 재생하면 말풍선 폭탄). 패널들은 `useDrag`로 이동 가능(우상단은 tldraw 스타일 패널과 겹치므로 피할 것).
+- **IME(한글) Enter 가드 필수**: 조합 중 Enter는 `isComposing`/`keyCode 229`로 들어옴 — 일반 Enter로 처리하면 조합 중 입력이 지워지거나 전송이 꼬임. 모든 Enter 핸들러는 `src/ime.ts`의 `isImeComposingEnter()` 가드 사용. **자동화 테스트(CDP insertText)는 IME를 안 타므로 이 계열 버그를 못 잡는다** — 한글 입력 UI는 synthetic `KeyboardEvent('keydown', {isComposing:true})`로 검증.
 - 검증 스크립트 추가: `scripts/verify-chat.mjs`(실 키입력 송신→릴레이→DOM 표시→페이드아웃).
 - **tldraw 3.15 컨텍스트 메뉴 버그(상류, 순정에서도 재현)**: 우클릭 메뉴를 "바깥 클릭"으로 닫으면 tldraw가 콘텐츠를 먼저 언마운트해 Radix 내부 open=true가 남음 → 이후 우클릭 전부 no-op (Escape 닫기는 정상). 우회: `src/FixedContextMenu.tsx` — 닫힘 transition마다 `DefaultContextMenu`를 key로 리마운트, `<Tldraw components={{ContextMenu: FixedContextMenu}}>`. 메뉴 열림 감지는 `editor.menus.isMenuOpen(\`context menu-${'$'}{editor.contextId}\`)`.
 - 진단용 순정 tldraw 페이지: `/stock.html`(vite 멀티 엔트리, `src/stock-main.tsx`) — "우리 코드 vs tldraw 자체" 버그 격리용. 빌드에 포함되지만 링크 안 됨.

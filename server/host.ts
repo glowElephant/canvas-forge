@@ -10,8 +10,9 @@ import { randomUUID } from 'node:crypto'
 import { WebSocketServer } from 'ws'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
-import { WS_PATH, SYNC_PATH, MCP_PATH, ASSETS_PATH } from '../shared/protocol.ts'
+import { WS_PATH, SYNC_PATH, MCP_PATH, ASSETS_PATH, type CursorChatMsg } from '../shared/protocol.ts'
 import { createWsBridge } from './ws-bridge.ts'
+import { loadBoard, saveBoard } from './board.ts'
 import { buildMcpServer } from './mcp.ts'
 import { createSyncRoom, roomToAreasInput } from './sync-room.ts'
 import { postCardToRoom } from './cards.ts'
@@ -122,10 +123,30 @@ export async function startHost(
   // 동기화 룸 (영속 포함)
   const syncRoom = await createSyncRoom({ boardFile: boardFilePath })
 
+  // 채팅 히스토리 영속 (.board/chat.json)
+  const chatFilePath = path.join(path.dirname(boardFilePath), 'chat.json')
+  const savedChat = (await loadBoard(chatFilePath)) as CursorChatMsg[] | null
+  let chatSaveTimer: NodeJS.Timeout | null = null
+  let latestChat: CursorChatMsg[] = savedChat ?? []
+  const flushChat = async () => {
+    if (chatSaveTimer) {
+      clearTimeout(chatSaveTimer)
+      chatSaveTimer = null
+    }
+    await saveBoard(chatFilePath, latestChat).catch((e) => console.error('chat 저장 실패:', e))
+  }
+
   // WS 2개: /sync(tldraw sync) + /ws(export 브리지) — noServer로 만들어 upgrade에서 직접 라우팅
   const wssSync = new WebSocketServer({ noServer: true })
   const wssBridge = new WebSocketServer({ noServer: true })
-  const bridge = createWsBridge(wssBridge)
+  const bridge = createWsBridge(wssBridge, {
+    initialChat: savedChat ?? [],
+    onChat: (history) => {
+      latestChat = history
+      if (chatSaveTimer) clearTimeout(chatSaveTimer)
+      chatSaveTimer = setTimeout(() => void flushChat(), 1000)
+    },
+  })
 
   httpServer.on('upgrade', (req, socket: Duplex, head) => {
     const url = new URL(req.url || '/', 'http://localhost')
@@ -301,6 +322,7 @@ export async function startHost(
     port: actualPort,
     close: async () => {
       await syncRoom.close() // flush 후 room 종료 (유실 방지)
+      await flushChat()
       wssSync.close()
       wssBridge.close()
       // keep-alive MCP 연결이 남아 close가 무기한 대기하지 않도록 강제 종료

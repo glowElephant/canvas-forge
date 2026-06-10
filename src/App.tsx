@@ -3,7 +3,9 @@ import { Tldraw, type Editor, type TLAssetStore } from 'tldraw'
 import { useSync } from '@tldraw/sync'
 import 'tldraw/tldraw.css'
 import { SYNC_PATH, ASSETS_PATH } from '../shared/protocol'
+import { isImeComposingEnter } from './ime'
 import { connectExportBridge, type BridgeHandle } from './ws-client'
+import { ChatPanel } from './ChatPanel'
 import { CursorChat } from './CursorChat'
 import { ExternalHandlers } from './external'
 import { AreaPanel } from './AreaPanel'
@@ -89,6 +91,7 @@ function Board({ user }: { user: UserInfo }) {
         <AreaPanel />
         <VideoCommentPanel />
         {bridge && <CursorChat bridge={bridge} user={user} />}
+        {bridge && <ChatPanel bridge={bridge} user={user} />}
       </Tldraw>
       <TopBar online={store.connectionStatus === 'online'} />
     </div>
@@ -126,7 +129,7 @@ function NameGate({ onDone }: { onDone: (u: UserInfo) => void }) {
           autoFocus
           value={name}
           onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && submit()}
+          onKeyDown={(e) => e.key === 'Enter' && !isImeComposingEnter(e) && submit()}
           placeholder="이름"
           style={{ padding: '8px 10px', fontSize: 14, border: '1px solid #ccc', borderRadius: 6 }}
         />
