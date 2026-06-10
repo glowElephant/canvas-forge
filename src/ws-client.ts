@@ -34,6 +34,8 @@ export function connectExportBridge(editor: Editor): () => void {
       }
       if (msg.t === 'requestExport') {
         await handleExport(editor, msg.areaId, msg.reqId, send)
+      } else if (msg.t === 'requestVideoFrame') {
+        await handleVideoFrame(editor, msg.shapeId, msg.time, msg.reqId, send)
       }
     }
 
@@ -71,6 +73,51 @@ async function handleExport(
     const result = await editor.toImage([shape.id], { format: 'png', background: true, padding: 16 })
     const pngBase64 = await blobToBase64(result.blob)
     send({ t: 'exportResult', reqId, pngBase64 })
+  } catch (e) {
+    send({ t: 'exportError', reqId, error: (e as Error).message })
+  }
+}
+
+/** 영상의 특정 시점 프레임을 offscreen <video> seek + canvas로 캡처 */
+async function handleVideoFrame(
+  editor: Editor,
+  shapeId: string,
+  time: number,
+  reqId: string,
+  send: (m: ClientMsg) => void,
+): Promise<void> {
+  try {
+    const shape = editor.getShape(shapeId as Parameters<Editor['getShape']>[0])
+    if (!shape || shape.type !== 'video') throw new Error(`영상 shape를 찾을 수 없습니다: ${shapeId}`)
+    const assetId = (shape.props as { assetId?: string }).assetId
+    const asset = assetId ? editor.getAsset(assetId as Parameters<Editor['getAsset']>[0]) : null
+    const src = (asset?.props as { src?: string } | undefined)?.src
+    if (!src) throw new Error('영상 소스 없음')
+
+    const video = document.createElement('video')
+    video.muted = true
+    video.preload = 'auto'
+    video.src = src
+    await new Promise<void>((resolve, reject) => {
+      video.onloadeddata = () => resolve()
+      video.onerror = () => reject(new Error('영상 로드 실패'))
+    })
+    video.currentTime = Math.min(time, Math.max(0, (video.duration || time) - 0.01))
+    await new Promise<void>((resolve, reject) => {
+      video.onseeked = () => resolve()
+      video.onerror = () => reject(new Error('seek 실패'))
+      setTimeout(resolve, 3000) // seeked 이벤트 누락 대비
+    })
+
+    const maxW = 1280
+    const scale = Math.min(1, maxW / (video.videoWidth || maxW))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round((video.videoWidth || 640) * scale)
+    canvas.height = Math.round((video.videoHeight || 360) * scale)
+    canvas.getContext('2d')!.drawImage(video, 0, 0, canvas.width, canvas.height)
+    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/png'))
+    if (!blob) throw new Error('캡처 실패')
+    send({ t: 'exportResult', reqId, pngBase64: await blobToBase64(blob) })
   } catch (e) {
     send({ t: 'exportError', reqId, error: (e as Error).message })
   }

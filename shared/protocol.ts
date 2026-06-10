@@ -10,7 +10,10 @@ export type ClientMsg =
   | { t: 'exportError'; reqId: string; error: string }
 
 /** 서버 → 브라우저 */
-export type ServerMsg = { t: 'requestExport'; reqId: string; areaId: string }
+export type ServerMsg =
+  | { t: 'requestExport'; reqId: string; areaId: string }
+  // 영상의 특정 시점 프레임 캡처 요청 (응답은 exportResult/exportError 재사용)
+  | { t: 'requestVideoFrame'; reqId: string; shapeId: string; time: number }
 
 /** export 브리지 WS 경로 */
 export const WS_PATH = '/ws'

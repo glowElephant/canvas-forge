@@ -11,6 +11,8 @@ export interface WsBridge {
   hasClient(): boolean
   /** 프레임 영역 PNG export 요청 → PNG Buffer resolve (timeout 시 reject) */
   requestExport(areaId: string, timeoutMs?: number): Promise<Buffer>
+  /** 영상 특정 시점 프레임 캡처 요청 → PNG Buffer */
+  requestVideoFrame(shapeId: string, time: number, timeoutMs?: number): Promise<Buffer>
 }
 
 export function createWsBridge(wss: WebSocketServer): WsBridge {
@@ -48,22 +50,29 @@ export function createWsBridge(wss: WebSocketServer): WsBridge {
     return null
   }
 
+  /** reqId 발급 → 메시지 전송 → exportResult/exportError 응답을 Buffer로 매칭 */
+  function request(makeMsg: (reqId: string) => ServerMsg, timeoutMs: number): Promise<Buffer> {
+    return new Promise<Buffer>((resolve, reject) => {
+      const client = pickClient()
+      if (!client) {
+        reject(new Error('보드 브라우저가 연결돼 있지 않습니다 (탭을 열어 주세요)'))
+        return
+      }
+      const reqId = randomUUID()
+      const timer = setTimeout(() => {
+        pending.delete(reqId)
+        reject(new Error('브라우저 응답 타임아웃'))
+      }, timeoutMs)
+      pending.set(reqId, { resolve, reject, timer })
+      client.send(JSON.stringify(makeMsg(reqId)))
+    })
+  }
+
   return {
     hasClient: () => pickClient() !== null,
     requestExport: (areaId, timeoutMs = 15000) =>
-      new Promise<Buffer>((resolve, reject) => {
-        const client = pickClient()
-        if (!client) {
-          reject(new Error('보드 브라우저가 연결돼 있지 않습니다 (탭을 열어 주세요)'))
-          return
-        }
-        const reqId = randomUUID()
-        const timer = setTimeout(() => {
-          pending.delete(reqId)
-          reject(new Error('export 응답 타임아웃'))
-        }, timeoutMs)
-        pending.set(reqId, { resolve, reject, timer })
-        client.send(JSON.stringify({ t: 'requestExport', reqId, areaId } satisfies ServerMsg))
-      }),
+      request((reqId) => ({ t: 'requestExport', reqId, areaId }), timeoutMs),
+    requestVideoFrame: (shapeId, time, timeoutMs = 20000) =>
+      request((reqId) => ({ t: 'requestVideoFrame', reqId, shapeId, time }), timeoutMs),
   }
 }

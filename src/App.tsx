@@ -6,6 +6,7 @@ import { SYNC_PATH, ASSETS_PATH } from '../shared/protocol'
 import { connectExportBridge } from './ws-client'
 import { ExternalHandlers } from './external'
 import { AreaPanel } from './AreaPanel'
+import { VideoCommentPanel } from './VideoCommentPanel'
 import { embedDefinitions } from './embeds'
 
 // 보드앱: tldraw 무한 캔버스 + 호스트 허브 실시간 동기화(@tldraw/sync).
@@ -73,6 +74,7 @@ function Board({ user }: { user: UserInfo }) {
       <Tldraw store={store.store} onMount={handleMount} embeds={embedDefinitions}>
         <ExternalHandlers />
         <AreaPanel />
+        <VideoCommentPanel />
       </Tldraw>
       <TopBar online={store.connectionStatus === 'online'} />
     </div>

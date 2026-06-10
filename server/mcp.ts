@@ -152,6 +152,31 @@ export function buildMcpServer(deps: McpDeps): McpServer {
           parts.push({ type: 'text', text: `[링크: ${link.url}] (읽기 실패: ${(err as Error).message})` })
         }
       }
+      // 영상 — 시간 태그 댓글의 시점 프레임을 브라우저로 캡처해 댓글과 함께 전달
+      for (const video of mods.videos.slice(0, 3)) {
+        const tagged = video.comments.filter((c) => typeof c.t === 'number').slice(0, 6)
+        const untagged = video.comments.filter((c) => typeof c.t !== 'number')
+        const fmt = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`
+
+        let head = `[영상: ${video.name}] 댓글 ${video.comments.length}개`
+        if (untagged.length > 0) {
+          head += '\n' + untagged.map((c) => `- ${c.author ?? '익명'}: ${c.text}`).join('\n')
+        }
+        if (video.comments.length === 0) head += ' — 시간 태그 댓글이 없어 분석할 시점이 지정되지 않음'
+        parts.push({ type: 'text', text: head })
+
+        for (const c of tagged) {
+          const label = `[영상 '${video.name}' t=${fmt(c.t!)} — ${c.author ?? '익명'}: "${c.text}"]`
+          try {
+            const png = await deps.bridge.requestVideoFrame(video.shapeId, c.t!)
+            parts.push({ type: 'text', text: label })
+            parts.push({ type: 'image', data: png.toString('base64'), mimeType: 'image/png' })
+          } catch (err) {
+            parts.push({ type: 'text', text: `${label} (프레임 캡처 생략: ${(err as Error).message})` })
+          }
+        }
+      }
+
       // 위치 북마크 — 대상 영역 제목을 찾아 따라갈 수 있게 안내
       if (mods.gotoPins.length > 0) {
         const areas = listAreas(deps.getSnapshot())

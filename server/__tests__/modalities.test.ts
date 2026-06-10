@@ -53,6 +53,19 @@ const store: Record<string, unknown> = {
     meta: { cfGoto: { targetId: 'shape:other-frame' } },
     props: {},
   },
+  // 영상 + 댓글 (시간 태그 1개 + 태그 없음 1개)
+  'asset:vid': {
+    id: 'asset:vid', typeName: 'asset', type: 'video',
+    props: { src: '/uploads/demo.webm', mimeType: 'video/webm', name: 'demo.webm' },
+  },
+  'shape:vid': {
+    id: 'shape:vid', typeName: 'shape', type: 'video', parentId: FRAME,
+    meta: { cfComments: [
+      { t: 1.5, author: '한아', text: '전환 어색' },
+      { author: '게스트', text: '전체적으로 좋음' },
+    ] },
+    props: { assetId: 'asset:vid' },
+  },
   // 프레임 밖 이미지 — 제외돼야 함
   'shape:outside': { id: 'shape:outside', typeName: 'shape', type: 'image', parentId: 'page:p', props: { assetId: 'asset:img1' } },
 }
@@ -71,6 +84,17 @@ describe('extractAreaModalities', () => {
   it('프레임 밖 shape는 제외', () => {
     const all = [...m.images, ...m.svgs, ...m.externalImages].length
     expect(all).toBe(3) // outside가 들어왔다면 4
+  })
+
+  it('영상과 댓글(cfComments)을 추출한다', () => {
+    expect(m.videos).toHaveLength(1)
+    const v = m.videos[0]
+    expect(v.shapeId).toBe('shape:vid')
+    expect(v.name).toBe('demo.webm')
+    expect(v.comments).toEqual([
+      { t: 1.5, author: '한아', text: '전환 어색' },
+      { t: undefined, author: '게스트', text: '전체적으로 좋음' },
+    ])
   })
 
   it('PDF와 위치 핀을 분류한다 (PDF는 files가 아니라 pdfs로)', () => {

@@ -29,6 +29,15 @@ export interface AreaModalities {
   links: Array<{ url: string; title: string }>
   /** 보드 내 위치 북마크 핀 (meta.cfGoto) — 다른 영역 참조 */
   gotoPins: Array<{ targetId: string }>
+  /** 영상 + 댓글(meta.cfComments). 시간 태그(t) 있는 댓글의 시점 프레임을 브라우저로 캡처 */
+  videos: Array<{ shapeId: string; name: string; comments: VideoComment[] }>
+}
+
+export interface VideoComment {
+  /** 시간 태그(초). 없으면 텍스트만 */
+  t?: number
+  author?: string
+  text: string
 }
 
 /** /uploads/<name> 형태의 src에서 uploads 상대 파일명 추출. 아니면 null */
@@ -46,7 +55,7 @@ export function extractAreaModalities(
   areaId: string,
 ): AreaModalities {
   const store = input.store as Record<string, AnyRecord>
-  const out: AreaModalities = { images: [], svgs: [], externalImages: [], files: [], pdfs: [], links: [], gotoPins: [] }
+  const out: AreaModalities = { images: [], svgs: [], externalImages: [], files: [], pdfs: [], links: [], gotoPins: [], videos: [] }
 
   for (const r of Object.values(store)) {
     if (r?.typeName !== 'shape' || r.parentId !== areaId) continue
@@ -82,6 +91,17 @@ export function extractAreaModalities(
       }
       if (mime === 'image/svg+xml') out.svgs.push({ name, file })
       else if (/^image\/(png|jpeg|gif|webp)$/.test(mime)) out.images.push({ name, mime, file })
+      continue
+    }
+
+    if (r.type === 'video') {
+      const asset = store[props.assetId as string]
+      const name = ((asset?.props?.name as string) || '영상') as string
+      const raw = (r.meta?.cfComments as VideoComment[] | undefined) ?? []
+      const comments = raw
+        .filter((c) => c && typeof c.text === 'string')
+        .map((c) => ({ t: typeof c.t === 'number' ? c.t : undefined, author: c.author, text: c.text }))
+      out.videos.push({ shapeId: r.id, name, comments })
       continue
     }
 
