@@ -7,8 +7,11 @@ import type { BridgeHandle } from './ws-client'
 //  - 각 줄은 일정 시간 후 페이드아웃되며 한 줄씩(시간순) 사라지고, 다 사라지면 원래대로
 //  - 다른 참여자의 줄도 그 사람 커서 아래에 같은 방식으로 표시 (브리지 릴레이)
 
-const LINE_LIFETIME_MS = 4500
-const LINE_FADE_MS = 900
+// 수명이 짧으면 다음 문장을 치는 동안 앞 줄이 사라져 "한 줄만 보이는" 체감이 됨 → 8초
+const LINE_LIFETIME_MS = 8000
+const LINE_FADE_MS = 1000
+/** 유저당 최대 표시 줄 수 (연타 폭주 시 오래된 줄부터 즉시 제거) */
+const MAX_LINES = 6
 
 interface ChatLine {
   id: number
@@ -36,7 +39,8 @@ export function CursorChat({ bridge, user }: { bridge: BridgeHandle; user: { id:
     const id = ++lineSeq
     setStacks((prev) => {
       const cur = prev[userId] ?? { name, color, lines: [] }
-      return { ...prev, [userId]: { name, color, lines: [...cur.lines, { id, text }] } }
+      const lines = [...cur.lines, { id, text }].slice(-MAX_LINES)
+      return { ...prev, [userId]: { name, color, lines } }
     })
     setTimeout(() => {
       setStacks((prev) => {
