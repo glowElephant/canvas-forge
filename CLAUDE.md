@@ -20,8 +20,8 @@
 - **MVP1 (완료)** — Claude 브릿지 루프: 프레임 영역 지정 + Claude가 MCP로 붙어 `read_area`→`post_card`→승인→빌드. 실 브라우저 검증 완료.
 - **MVP2 (완료)** — 실시간 협업: N명 동시접속, 멀티커서, **호스트 허브 WS 동기화(`@tldraw/sync` 공식)**. ※ 당초 "Yjs+WebRTC P2P"는 시그널링/TURN이 필요해 서버리스가 아니라서 기각 — 호스트가 이미 WS 서버이므로 허브 방식 채택.
 - **MVP3a (완료)** — 멀티모달 읽기: read_area가 이미지 원본 개별 전달·텍스트 파일 카드(`meta.cfFile`)·링크 unfurl+본문까지 멀티모달로 반환.
-- **MVP3b (다음)** — PDF 추출, iframe 임의 URL 임베드, 보드 내 위치 북마크.
-- **MVP3c** — 영상 프레임 추출(ffmpeg), 크로스 프로젝트 북마크. (음성은 사용자 결정으로 제외)
+- **MVP3b (완료)** — PDF 추출(unpdf), catch-all 웹페이지 iframe 임베드, 영역 패널+위치 핀(`meta.cfGoto`), MCP 서버 instructions.
+- **MVP3c (다음)** — 영상 프레임 추출(ffmpeg), 크로스 프로젝트 북마크. (음성은 사용자 결정으로 제외)
 
 ## 가드레일 (하지 말 것)
 
@@ -50,6 +50,8 @@
 - read_area의 export 저장 폴더명은 area_id를 `safeName()`으로 치환(Windows `:` 금지).
 - **MVP3a 멀티모달**: `server/modalities.ts` — `extractAreaModalities`(순수: image/svg/외부이미지/`meta.cfFile`/bookmark·embed 분류) + `readUpload`(경로탈출 차단)/`fetchLinkText`/`unfurl`(IO, 타임아웃 8s·1MB 제한). 파일 카드는 **커스텀 shape가 아니라 note shape + `meta.cfFile`**(스키마 변경 없음 → sync 안전). 클라 핸들러는 `src/external.tsx` — `<Tldraw>` **자식으로 렌더해야 함**(useToasts/useTranslation 컨텍스트 필요), 이미지·영상은 `defaultHandleExternalFileContent`에 위임. URL 붙여넣기 검증은 `editor.putExternalContent({type:'url', url})`로 시뮬레이션 가능.
 - SVG는 Claude API image 미지원 → 이미지가 아니라 소스 텍스트로 전달.
+- **MVP3b**: PDF는 `unpdf`(pdf.js, worker 불필요)로 추출 — 깨진 xref도 복구함. 위치 핀=`meta.cfGoto={targetId}`(클릭 점프는 `AreaPanel`의 `editor.on('event')` pointer_up). 임베드 정의는 editor가 아니라 **`editor.getShapeUtil('embed').getEmbedDefinitions()`**에 산다. **catch-all 임베드를 넣으면 URL 붙여넣기가 전부 iframe이 되는 충돌** → `registerExternalContentHandler('url')`로 북마크 강제(임베드 다이얼로그는 `type:'embed'` 경로라 안전). MCP 서버 instructions는 `new McpServer(info, { instructions })` — initialize 응답으로 붙는 Claude에게 자동 전달됨(루프 규칙·read_area 해석법·post_card 규칙).
+- 브라우저 검증 대체 수단: `node scripts/verify-headless.mjs <url>` — chrome-devtools MCP가 잠겼을 때 CDP로 직접 헤드리스 검증(이름 게이트→보드 구성→실 마우스 이벤트까지). **검증 전 `.board` 초기화 필수**(이전 실행 상태 누적됨).
 - 영속은 debounce(500ms) — 종료 유실 막으려 `close()`가 flush를 await, 직접 실행 시 SIGINT/SIGTERM도 flush 후 종료. `closeAllConnections()`로 keep-alive MCP 연결 강제 종료(안 하면 종료 무기한 대기).
 - `startHost({ port, boardFile, exportsDir, assetsDir })` — 경로 주입 가능. 테스트는 temp 디렉토리로 격리(실제 `.board` 오염 금지).
 - 검증: `server/__tests__/` 19개(테스트: sync-room 마이그레이션·post_card / mcp.e2e / persistence-flush / degraded-mode / static-guard / board / areas). 실 브라우저 검증 스크린샷: `docs/superpowers/mvp1-loop-verified.png`, `mvp2-collab-verified.png`.

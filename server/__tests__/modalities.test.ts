@@ -3,7 +3,7 @@ import http from 'node:http'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { extractAreaModalities, readUpload, fetchLinkText, unfurl, htmlToText } from '../modalities.ts'
+import { extractAreaModalities, readUpload, fetchLinkText, unfurl, htmlToText, extractPdfText } from '../modalities.ts'
 
 // MVP3a: 영역 내 모달리티 추출(순수) + 디스크/URL 읽기(IO)
 
@@ -41,6 +41,18 @@ const store: Record<string, unknown> = {
     props: { src: 'http://example.com/page', title: '예시 페이지' },
   },
   'shape:bm': { id: 'shape:bm', typeName: 'shape', type: 'bookmark', parentId: FRAME, props: { assetId: 'asset:bm' } },
+  // PDF 파일 카드
+  'shape:pdf1': {
+    id: 'shape:pdf1', typeName: 'shape', type: 'note', parentId: FRAME,
+    meta: { cfFile: { file: 'doc.pdf', name: 'doc.pdf', mime: 'application/pdf' } },
+    props: {},
+  },
+  // 위치 북마크 핀
+  'shape:pin1': {
+    id: 'shape:pin1', typeName: 'shape', type: 'note', parentId: FRAME,
+    meta: { cfGoto: { targetId: 'shape:other-frame' } },
+    props: {},
+  },
   // 프레임 밖 이미지 — 제외돼야 함
   'shape:outside': { id: 'shape:outside', typeName: 'shape', type: 'image', parentId: 'page:p', props: { assetId: 'asset:img1' } },
 }
@@ -59,6 +71,31 @@ describe('extractAreaModalities', () => {
   it('프레임 밖 shape는 제외', () => {
     const all = [...m.images, ...m.svgs, ...m.externalImages].length
     expect(all).toBe(3) // outside가 들어왔다면 4
+  })
+
+  it('PDF와 위치 핀을 분류한다 (PDF는 files가 아니라 pdfs로)', () => {
+    expect(m.pdfs).toEqual([{ file: 'doc.pdf', name: 'doc.pdf' }])
+    expect(m.files.some((f) => f.file === 'doc.pdf')).toBe(false)
+    expect(m.gotoPins).toEqual([{ targetId: 'shape:other-frame' }])
+  })
+})
+
+describe('extractPdfText', () => {
+  it('미니 PDF에서 텍스트를 추출한다', async () => {
+    // 최소 구조의 PDF (pdf.js는 깨진 xref를 복구해서 읽는다)
+    const minimalPdf = `%PDF-1.4
+1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
+2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
+3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj
+4 0 obj<</Length 52>>stream
+BT /F1 24 Tf 72 720 Td (Hello PDF Planning) Tj ET
+endstream
+endobj
+5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj
+trailer<</Root 1 0 R/Size 6>>
+%%EOF`
+    const text = await extractPdfText(Buffer.from(minimalPdf, 'latin1'))
+    expect(text).toContain('Hello PDF Planning')
   })
 })
 

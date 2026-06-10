@@ -3,7 +3,7 @@ import path from 'node:path'
 import { z } from 'zod'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { listAreas, readArea } from './areas.ts'
-import { extractAreaModalities, readUpload, fetchLinkText } from './modalities.ts'
+import { extractAreaModalities, readUpload, fetchLinkText, extractPdfText } from './modalities.ts'
 import type { WsBridge } from './ws-bridge.ts'
 
 // MCP 서버: Claude가 붙는 3도구. 보드 읽기·쓰기까지만 — 실제 빌드는 Claude Code 기본 도구로.
@@ -28,8 +28,24 @@ function safeName(areaId: string): string {
   return areaId.replace(/[^a-zA-Z0-9_-]/g, '_')
 }
 
+// 붙는 Claude에게 전달되는 사용 규칙 (initialize 시 클라이언트 시스템 컨텍스트에 노출됨)
+const INSTRUCTIONS = `canvas-forge: 무한 캔버스 협업 기획 보드. 사람들(호스트+초대자)이 tldraw 보드에 텍스트·그림·이미지·파일·링크로 기획하고, 너(Claude)는 이 MCP로 보드를 읽고 정리 카드를 게시한다.
+
+개념: '영역' = 보드의 프레임 1개. 사람이 프레임으로 주제를 묶는다. area_id = 프레임 shape id.
+
+기본 루프(중요):
+1) list_areas로 영역 목록 확인
+2) read_area(area_id)로 영역을 읽는다
+3) 읽은 내용을 기획으로 구조화해 post_card(area_id, markdown)로 "이해한 내용 + 확인 질문" 카드를 게시한다
+4) 사람이 보드에서 카드를 보고 수정하거나 승인한다 (수정되면 다시 read_area로 확인)
+5) 승인받은 뒤의 실제 산출물(파일 생성·빌드)은 이 MCP가 아니라 Claude Code 기본 도구로 만든다
+
+read_area 응답 해석: 텍스트 요약 → 프레임 스크린샷(이미지) → [이미지 원본: …], [SVG 소스: …], [파일: …], [PDF: …], [링크: …] 파트가 이어진다. 각 헤더가 출처 구분이다. [위치 북마크 → '제목' (id)]를 만나면 다른 영역이 참조된 것 — 필요하면 그 id로 read_area를 추가 호출해 따라가 읽어라. [스크린샷 생략]이 보이면 보드 탭이 안 열린 상태다(텍스트만으로 판단하되 그 사실을 언급).
+
+post_card 규칙: markdown으로 간결하게. 단정하지 말고 "이렇게 이해했는데 맞나요?" 형태의 확인 질문을 포함하라. 카드는 모든 참여자 화면에 실시간 표시된다. 요청받지 않은 카드 도배 금지 — 보드 수정 수단은 post_card뿐이다.`
+
 export function buildMcpServer(deps: McpDeps): McpServer {
-  const server = new McpServer({ name: 'canvas-forge', version: '0.2.0' })
+  const server = new McpServer({ name: 'canvas-forge', version: '0.3.0' }, { instructions: INSTRUCTIONS })
 
   server.registerTool(
     'list_areas',
@@ -115,12 +131,38 @@ export function buildMcpServer(deps: McpDeps): McpServer {
         if (body.length > 16000) body = body.slice(0, 16000) + '\n…(잘림)'
         parts.push({ type: 'text', text: `[파일: ${f.name} (${f.mime})]\n${body}` })
       }
+      for (const pdf of mods.pdfs.slice(0, 4)) {
+        const buf = await readUpload(deps.assetsDir, pdf.file)
+        if (!buf) {
+          parts.push({ type: 'text', text: `[PDF: ${pdf.name}] (파일 없음)` })
+          continue
+        }
+        try {
+          const text = await extractPdfText(buf)
+          parts.push({ type: 'text', text: `[PDF: ${pdf.name}]\n${text || '(추출된 텍스트 없음 — 스캔본일 수 있음)'}` })
+        } catch (err) {
+          parts.push({ type: 'text', text: `[PDF: ${pdf.name}] (추출 실패: ${(err as Error).message})` })
+        }
+      }
       for (const link of mods.links.slice(0, 5)) {
         try {
           const excerpt = await fetchLinkText(link.url)
           parts.push({ type: 'text', text: `[링크: ${link.url}${link.title ? ` — ${link.title}` : ''}]\n${excerpt}` })
         } catch (err) {
           parts.push({ type: 'text', text: `[링크: ${link.url}] (읽기 실패: ${(err as Error).message})` })
+        }
+      }
+      // 위치 북마크 — 대상 영역 제목을 찾아 따라갈 수 있게 안내
+      if (mods.gotoPins.length > 0) {
+        const areas = listAreas(deps.getSnapshot())
+        for (const pin of mods.gotoPins) {
+          const target = areas.find((a) => a.id === pin.targetId)
+          parts.push({
+            type: 'text',
+            text: target
+              ? `[위치 북마크 → '${target.title}' (${target.id})] — 필요하면 read_area("${target.id}")로 따라가 읽으세요.`
+              : `[위치 북마크 → ${pin.targetId}] (대상 영역을 찾을 수 없음)`,
+          })
         }
       }
 

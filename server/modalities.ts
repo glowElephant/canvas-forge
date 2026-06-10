@@ -23,8 +23,12 @@ export interface AreaModalities {
   externalImages: Array<{ name: string; url: string }>
   /** 텍스트 파일 카드 (meta.cfFile) */
   files: Array<{ name: string; mime: string; file: string }>
+  /** PDF 파일 카드 (meta.cfFile, mime=application/pdf) */
+  pdfs: Array<{ name: string; file: string }>
   /** 링크 (bookmark/embed) */
   links: Array<{ url: string; title: string }>
+  /** 보드 내 위치 북마크 핀 (meta.cfGoto) — 다른 영역 참조 */
+  gotoPins: Array<{ targetId: string }>
 }
 
 /** /uploads/<name> 형태의 src에서 uploads 상대 파일명 추출. 아니면 null */
@@ -42,16 +46,27 @@ export function extractAreaModalities(
   areaId: string,
 ): AreaModalities {
   const store = input.store as Record<string, AnyRecord>
-  const out: AreaModalities = { images: [], svgs: [], externalImages: [], files: [], links: [] }
+  const out: AreaModalities = { images: [], svgs: [], externalImages: [], files: [], pdfs: [], links: [], gotoPins: [] }
 
   for (const r of Object.values(store)) {
     if (r?.typeName !== 'shape' || r.parentId !== areaId) continue
     const props = r.props ?? {}
 
-    // 텍스트 파일 카드 (어느 shape든 meta.cfFile)
+    // 위치 북마크 핀 (meta.cfGoto)
+    const cfGoto = r.meta?.cfGoto as { targetId?: string } | undefined
+    if (cfGoto?.targetId) {
+      out.gotoPins.push({ targetId: cfGoto.targetId })
+      continue
+    }
+
+    // 파일 카드 (어느 shape든 meta.cfFile) — PDF는 별도 분류
     const cfFile = r.meta?.cfFile as { file?: string; name?: string; mime?: string } | undefined
     if (cfFile?.file) {
-      out.files.push({ file: cfFile.file, name: cfFile.name ?? cfFile.file, mime: cfFile.mime ?? 'text/plain' })
+      if (cfFile.mime === 'application/pdf') {
+        out.pdfs.push({ file: cfFile.file, name: cfFile.name ?? cfFile.file })
+      } else {
+        out.files.push({ file: cfFile.file, name: cfFile.name ?? cfFile.file, mime: cfFile.mime ?? 'text/plain' })
+      }
       continue
     }
 
@@ -134,6 +149,15 @@ export function htmlToText(html: string, maxChars = 3000): string {
 /** 링크 본문을 텍스트로 (read_area용) */
 export async function fetchLinkText(url: string, maxChars = 3000): Promise<string> {
   return htmlToText(await fetchHtml(url), maxChars)
+}
+
+/** PDF 버퍼에서 텍스트 추출 (unpdf = pdf.js, worker 불필요) */
+export async function extractPdfText(buf: Buffer, maxChars = 16000): Promise<string> {
+  const { getDocumentProxy, extractText } = await import('unpdf')
+  const pdf = await getDocumentProxy(new Uint8Array(buf))
+  const { text } = await extractText(pdf, { mergePages: true })
+  const t = (text as string).replace(/\s+/g, ' ').trim()
+  return t.length > maxChars ? t.slice(0, maxChars) + ' …(잘림)' : t
 }
 
 export interface Unfurled {

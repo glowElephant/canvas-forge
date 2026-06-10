@@ -29,6 +29,15 @@ function isTextLike(file: File): boolean {
   return TEXT_EXTENSIONS.has(ext)
 }
 
+function isPdf(file: File): boolean {
+  return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+}
+
+/** 파일 카드로 처리할 대상 (텍스트류 + PDF) */
+function isCardFile(file: File): boolean {
+  return isTextLike(file) || isPdf(file)
+}
+
 function sanitize(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, '_')
 }
@@ -42,8 +51,8 @@ export function ExternalHandlers() {
     // 파일 드롭/붙여넣기
     editor.registerExternalContentHandler('files', async (content) => {
       const { files, point } = content
-      const textFiles = files.filter(isTextLike)
-      const mediaFiles = files.filter((f) => !isTextLike(f))
+      const textFiles = files.filter(isCardFile)
+      const mediaFiles = files.filter((f) => !isCardFile(f))
 
       if (mediaFiles.length > 0) {
         await defaultHandleExternalFileContent(editor, { files: mediaFiles, point }, { toasts, msg })
@@ -58,16 +67,32 @@ export function ExternalHandlers() {
           toasts.addToast({ title: `업로드 실패: ${file.name}`, severity: 'error' })
           continue
         }
+        const mime = isPdf(file) ? 'application/pdf' : file.type || 'text/plain'
         editor.createShape({
           id: createShapeId(),
           type: 'note',
           x: at.x + offset,
           y: at.y,
-          meta: { cfFile: { file: uploadName, name: file.name, mime: file.type || 'text/plain' } },
-          props: { richText: toRichText(`📄 ${file.name}`), color: 'blue' },
+          meta: { cfFile: { file: uploadName, name: file.name, mime } },
+          props: { richText: toRichText(`📄 ${file.name}`), color: isPdf(file) ? 'red' : 'blue' },
         })
         offset += 240
       }
+    })
+
+    // URL 붙여넣기는 항상 북마크로 (catch-all 임베드 정의가 가로채지 않게 — iframe은 메뉴의 임베드 삽입으로만)
+    editor.registerExternalContentHandler('url', async ({ point, url }) => {
+      const asset = await editor.getAssetForExternalContent({ type: 'url', url })
+      if (!asset) return
+      const at = point ?? editor.getViewportPageBounds().center
+      if (!editor.getAsset(asset.id)) editor.createAssets([asset])
+      editor.createShape({
+        id: createShapeId(),
+        type: 'bookmark',
+        x: at.x - 150,
+        y: at.y - 160,
+        props: { url, assetId: asset.id, w: 300, h: 320 },
+      })
     })
 
     // URL 붙여넣기 → bookmark asset 메타데이터 채우기

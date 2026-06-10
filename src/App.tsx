@@ -5,6 +5,8 @@ import 'tldraw/tldraw.css'
 import { SYNC_PATH, ASSETS_PATH } from '../shared/protocol'
 import { connectExportBridge } from './ws-client'
 import { ExternalHandlers } from './external'
+import { AreaPanel } from './AreaPanel'
+import { embedDefinitions } from './embeds'
 
 // 보드앱: tldraw 무한 캔버스 + 호스트 허브 실시간 동기화(@tldraw/sync).
 // Claude 없이도 N명이 같이 쓰는 화이트보드로 완전히 동작한다.
@@ -68,8 +70,9 @@ function Board({ user }: { user: UserInfo }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0 }}>
-      <Tldraw store={store.store} onMount={handleMount}>
+      <Tldraw store={store.store} onMount={handleMount} embeds={embedDefinitions}>
         <ExternalHandlers />
+        <AreaPanel />
       </Tldraw>
       <TopBar online={store.connectionStatus === 'online'} />
     </div>
