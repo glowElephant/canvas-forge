@@ -36,9 +36,10 @@
 **명령:** `npm install` → `npm run build`(프론트→dist/) → `npm run host`(호스트 프로세스, 기본 포트 4317). 테스트 `npm test`(vitest, 서버만). 타입체크 `npx tsc -p tsconfig.json --noEmit`(프론트) / `-p tsconfig.server.json`(서버).
 
 **구조 (보드의 진실의 출처 = 서버의 `TLSocketRoom`):**
-- `shared/protocol.ts` — `/ws` export 브리지 메시지 타입 + 경로 상수(`SYNC_PATH`/`WS_PATH`/`MCP_PATH`/`ASSETS_PATH`) 단일 출처.
-- `server/` — `config.ts`(경로/포트, 절대경로 금지), `sync-room.ts`(**TLSocketRoom 생성 + board.json 영속·마이그레이션 + `roomToAreasInput`**), `cards.ts`(post_card 서버측 쓰기), `board.ts`(파일 r/w), `areas.ts`(스냅샷→list/read, **순수 함수**), `ws-bridge.ts`(export 전용), `mcp.ts`(3도구, room에서 읽음), `host.ts`(엔트리: 정적 + `/sync` + `/ws` + `/mcp` + `/uploads` + `/api/invite`(LAN 초대 URL) 한 프로세스).
-- `src/` — `App.tsx`(이름 게이트→`useSync`→`<Tldraw store>`), `ws-client.ts`(export 응답 전용, 자동 재연결).
+- `shared/protocol.ts` — `/ws` 브리지 메시지(`ClientMsg`/`ServerMsg`: export 요청/응답 + `requestVideoFrame` + `cursorChat`/`chatHistory` 채팅 릴레이) + 경로 상수(`SYNC_PATH`/`WS_PATH`/`MCP_PATH`/`ASSETS_PATH`=`/uploads`) 단일 출처.
+- `server/` — `config.ts`(경로/포트, 절대경로 금지), `sync-room.ts`(**TLSocketRoom 생성 + board.json 영속·마이그레이션 + `roomToAreasInput`**), `cards.ts`(post_card 서버측 쓰기), `board.ts`(파일 r/w), `areas.ts`(스냅샷→list/read, 시간순 정렬, **순수 함수**), `modalities.ts`(이미지/파일/PDF/링크/영상/위치핀 추출 + unfurl·PDF추출 IO), `ws-bridge.ts`(export·영상프레임 요청 + 채팅 릴레이/히스토리), `mcp.ts`(3도구 + instructions, room에서 읽음), `host.ts`(엔트리: 정적 + `/sync` + `/ws` + `/mcp` + `/uploads` + `/api/invite`(LAN 초대 URL) + `/api/unfurl`(북마크 메타) 한 프로세스, `.board/chat.json` 채팅 영속).
+- `src/` — `App.tsx`(이름 게이트→`useSync`→`<Tldraw store components>`, 빌드 스탬프), `main.tsx`(진입), `ws-client.ts`(export 응답·영상 프레임 캡처·채팅 송수신, 자동 재연결), `ChatPanel.tsx`(우측 누적 채팅 패널, 입력 일원화), `CursorChat.tsx`(커서 위 말풍선 **표시 전용** — `/` 입력 제거됨), `AreaPanel.tsx`(영역 목록·★지정🤖·위치핀📍), `VideoCommentPanel.tsx`(영상 댓글+시간태그), `external.tsx`(파일/URL 외부 콘텐츠 핸들러), `embeds.ts`(catch-all 웹페이지 임베드), `FixedContextMenu.tsx`(우클릭 메뉴 버그 우회), `ErrorRibbon.tsx`(런타임 에러 화면 표시), `ime.ts`(IME 안전 Enter), `uid.ts`(randomUUID 폴백), `useDrag.ts`(패널 드래그), `stock-main.tsx`+`stock.html`(진단용 순정 tldraw).
+- `scripts/` — `verify-headless.mjs`/`verify-video.mjs`/`verify-chat.mjs`: CDP 헤드리스 검증(chrome-devtools MCP 막혔을 때 대체). **검증은 localhost뿐 아니라 IP origin(`http://192.168.x.x:4317`)으로도 돌릴 것**(비보안 컨텍스트 버그는 localhost에서 안 잡힘).
 
 **재발견 방지 — 검증된 사실(설치본 기준):**
 - MCP SDK 1.29: HTTP 트랜스포트 클래스명은 `StreamableHTTPServerTransport`(context7가 알려준 `Node...` 접두사는 틀림). import `@modelcontextprotocol/sdk/server/streamableHttp.js`. stateful 세션(`mcp-session-id` 헤더)으로 구현 — Claude Code HTTP 클라이언트가 GET(SSE)도 열기 때문에 stateless보다 안전.
