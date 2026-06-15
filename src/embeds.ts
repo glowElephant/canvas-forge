@@ -1,4 +1,5 @@
 import { DEFAULT_EMBED_DEFINITIONS, type TLEmbedDefinition } from 'tldraw'
+import { t } from './i18n'
 
 // catch-all 웹페이지 임베드 (MVP3b): 알려진 제공자(유튜브 등)에 안 걸리는 모든 http(s) URL을
 // iframe으로 띄울 수 있게 한다. 목록 "끝"에 둬서 알려진 제공자가 먼저 매칭되게 함.
@@ -6,7 +7,7 @@ import { DEFAULT_EMBED_DEFINITIONS, type TLEmbedDefinition } from 'tldraw'
 
 const webpageEmbed: TLEmbedDefinition = {
   type: 'webpage',
-  title: '웹페이지 (iframe)',
+  title: t('embed.webpage_title'),
   hostnames: ['*'],
   width: 800,
   height: 600,

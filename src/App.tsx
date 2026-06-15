@@ -14,6 +14,8 @@ import { AreaPanel } from './AreaPanel'
 import { FixedContextMenu } from './FixedContextMenu'
 import { VideoCommentPanel } from './VideoCommentPanel'
 import { embedDefinitions } from './embeds'
+import { useT } from './i18n'
+import { LangToggle } from './LangToggle'
 
 // 컨텍스트 메뉴 재오픈 버그 우회 (FixedContextMenu 주석 참고)
 const components = { ContextMenu: FixedContextMenu }
@@ -69,6 +71,7 @@ function Board({ user }: { user: UserInfo }) {
   )
   const store = useSync({ uri, assets: hostAssets, userInfo: user })
   const [bridge, setBridge] = useState<BridgeHandle | null>(null)
+  const t = useT()
 
   const handleMount = useCallback(
     (editor: Editor) => {
@@ -84,10 +87,10 @@ function Board({ user }: { user: UserInfo }) {
   )
 
   if (store.status === 'loading') {
-    return <Center>보드에 연결 중…</Center>
+    return <Center>{t('loading.connecting_board')}</Center>
   }
   if (store.status === 'error') {
-    return <Center>연결 실패: {store.error.message} — 호스트가 켜져 있는지 확인하고 새로고침하세요.</Center>
+    return <Center>{t('error.connection_failed', { error: store.error.message })}</Center>
   }
 
   return (
@@ -115,6 +118,7 @@ function Center({ children }: { children: React.ReactNode }) {
 /** 첫 접속 시 이름 1회 입력 (localStorage 저장, 색은 자동) */
 function NameGate({ onDone }: { onDone: (u: UserInfo) => void }) {
   const [name, setName] = useState('')
+  const t = useT()
   const done = useRef(false) // keydown+keyup 폴백으로 이중 제출 방지
   const submit = () => {
     const trimmed = name.trim()
@@ -130,16 +134,17 @@ function NameGate({ onDone }: { onDone: (u: UserInfo) => void }) {
   }
   return (
     <Center>
+      <LangToggle style={{ position: 'fixed', top: 12, right: 12 }} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: 280 }}>
         <strong style={{ fontSize: 16 }}>canvas-forge</strong>
-        <span style={{ color: '#555' }}>보드에서 쓸 이름을 입력하세요</span>
+        <span style={{ color: '#555' }}>{t('name_gate.instruction')}</span>
         <input
           autoFocus
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && !isImeComposingEnter(e) && submit()}
           onKeyUp={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && submit()}
-          placeholder="이름"
+          placeholder={t('name_gate.placeholder')}
           style={{ padding: '8px 10px', fontSize: 14, border: '1px solid #ccc', borderRadius: 6 }}
         />
         <button
@@ -147,7 +152,7 @@ function NameGate({ onDone }: { onDone: (u: UserInfo) => void }) {
           disabled={!name.trim()}
           style={{ padding: '8px 10px', fontSize: 14, borderRadius: 6, border: 'none', background: '#1971c2', color: '#fff', cursor: 'pointer' }}
         >
-          입장
+          {t('name_gate.submit')}
         </button>
       </div>
     </Center>
@@ -156,6 +161,7 @@ function NameGate({ onDone }: { onDone: (u: UserInfo) => void }) {
 
 /** 상단 가운데: 동기화 상태 배지 + 초대 링크 복사 버튼 */
 function TopBar({ online }: { online: boolean }) {
+  const t = useT()
   return (
     <div
       style={{
@@ -184,37 +190,52 @@ function TopBar({ online }: { online: boolean }) {
         }}
       >
         <span style={{ width: 8, height: 8, borderRadius: 999, background: online ? '#16a34a' : '#dc2626' }} />
-        {online ? '실시간 동기화 중' : '연결 끊김 — 재연결 시도 중'}
-        <span style={{ color: '#adb5bd', fontSize: 10 }} title="빌드 시각 (MM-DD HH:mm)">
+        {online ? t('status.online') : t('status.offline')}
+        <span style={{ color: '#adb5bd', fontSize: 10 }} title={t('status.build_time_hint')}>
           {__BUILD_ID__}
         </span>
       </div>
       <InviteButton />
+      <LangToggle />
     </div>
   )
 }
 
+type InviteStatus = 'idle' | 'no_ip' | 'copied' | 'failed'
+
 function InviteButton() {
-  const [label, setLabel] = useState('초대 링크 복사')
+  const t = useT()
+  // 라벨이 아니라 상태를 들고 t()로 렌더 → 언어 전환 시에도 즉시 반영
+  const [status, setStatus] = useState<InviteStatus>('idle')
 
   const copy = useCallback(async () => {
+    const reset = () => setTimeout(() => setStatus('idle'), 2000)
     try {
       const res = await fetch('/api/invite')
       const { urls } = (await res.json()) as { urls: string[] }
       const url = urls[0]
       if (!url) {
-        setLabel('LAN IP 못 찾음')
-        setTimeout(() => setLabel('초대 링크 복사'), 2000)
+        setStatus('no_ip')
+        reset()
         return
       }
       await copyText(url)
-      setLabel('복사됨!')
-      setTimeout(() => setLabel('초대 링크 복사'), 2000)
+      setStatus('copied')
+      reset()
     } catch {
-      setLabel('복사 실패')
-      setTimeout(() => setLabel('초대 링크 복사'), 2000)
+      setStatus('failed')
+      reset()
     }
   }, [])
+
+  const label =
+    status === 'no_ip'
+      ? t('invite.no_lan_ip')
+      : status === 'copied'
+        ? t('invite.copied')
+        : status === 'failed'
+          ? t('invite.copy_failed')
+          : t('invite.button')
 
   return (
     <button

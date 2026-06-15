@@ -11,6 +11,7 @@ import {
   type TLAsset,
 } from 'tldraw'
 import { ASSETS_PATH } from '../shared/protocol'
+import { t } from './i18n'
 
 // 외부 콘텐츠 핸들러 (MVP3a):
 //  - 파일 드롭: 이미지/영상은 tldraw 기본(업로드→image shape), 텍스트류는 업로드 후 "파일 카드"(meta.cfFile)
@@ -64,7 +65,7 @@ export function ExternalHandlers() {
         const uploadName = `file-${Date.now().toString(36)}-${sanitize(file.name)}`
         const res = await fetch(`${ASSETS_PATH}/${encodeURIComponent(uploadName)}`, { method: 'PUT', body: file })
         if (!res.ok) {
-          toasts.addToast({ title: `업로드 실패: ${file.name}`, severity: 'error' })
+          toasts.addToast({ title: t('upload.failed', { filename: file.name }), severity: 'error' })
           continue
         }
         const mime = isPdf(file) ? 'application/pdf' : file.type || 'text/plain'

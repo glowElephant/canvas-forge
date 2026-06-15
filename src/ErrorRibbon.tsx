@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { useT } from './i18n'
 
 // 조용히 죽는 런타임 에러를 화면에 노출 — "아무 일도 안 일어나는" 버그를 즉시 진단 가능하게.
 // (실례: 비보안 컨텍스트에서 crypto.randomUUID throw → 채팅 전송이 무반응이었음)
 export function ErrorRibbon() {
+  const t = useT()
   const [msg, setMsg] = useState<string | null>(null)
 
   useEffect(() => {
@@ -26,9 +28,9 @@ export function ErrorRibbon() {
         background: '#c92a2a', color: '#fff', font: '12px/1.5 system-ui, sans-serif',
         boxShadow: '0 2px 8px rgba(0,0,0,0.3)', cursor: 'pointer',
       }}
-      title="클릭하면 닫힘"
+      title={t('error.close_hint')}
     >
-      ⚠ 오류: {msg} — 이 메시지를 캡처해서 알려주세요
+      {t('error.runtime', { message: msg })}
     </div>
   )
 }

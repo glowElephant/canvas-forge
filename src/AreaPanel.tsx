@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createShapeId, toRichText, useEditor, useValue, type TLShapeId } from 'tldraw'
 import { useDrag } from './useDrag'
+import { useT } from './i18n'
 
 // 영역(프레임) 내비게이션 패널 (MVP3b):
 //  - 프레임 목록 클릭 → 해당 영역으로 카메라 이동
@@ -9,6 +10,7 @@ import { useDrag } from './useDrag'
 
 export function AreaPanel() {
   const editor = useEditor()
+  const t = useT()
   const [open, setOpen] = useState(true)
   // 우상단은 tldraw 스타일 패널과 겹침 → 기본 좌측 + 헤더 드래그로 이동 가능
   const { pos, onPointerDown } = useDrag({ x: 8, y: 64 })
@@ -21,7 +23,7 @@ export function AreaPanel() {
         .filter((s) => s.type === 'frame')
         .map((s) => ({
           id: s.id,
-          name: ((s.props as { name?: string }).name || '(제목 없음)') as string,
+          name: ((s.props as { name?: string }).name || '') as string,
           picked: !!s.meta?.cfClaudePick,
         })),
     [editor],
@@ -91,36 +93,36 @@ export function AreaPanel() {
           onClick={() => setOpen(!open)}
           style={{ flex: 1, padding: '6px 10px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit', fontWeight: 600 }}
         >
-          영역 {frames.length}개 {open ? '▾' : '▸'}
+          {t('area_panel.header', { count: frames.length })} {open ? '▾' : '▸'}
         </button>
-        <span style={{ padding: '0 8px', color: '#adb5bd', userSelect: 'none' }} title="드래그로 이동">⠿</span>
+        <span style={{ padding: '0 8px', color: '#adb5bd', userSelect: 'none' }} title={t('drag.tooltip')}>⠿</span>
       </div>
       {open && (
         <div style={{ maxHeight: 240, overflowY: 'auto' }}>
           {frames.length === 0 && (
             <div style={{ padding: '8px 10px', color: '#868e96' }}>
-              프레임 도구로 영역을 그리세요 — 단축키 <b>F</b> (툴바 오른쪽 ⌃ 더보기 안에도 있음)
+              {t('area_panel.empty')}
             </div>
           )}
           {frames.map((f) => (
             <div key={f.id} style={{ display: 'flex', alignItems: 'center', borderTop: '1px solid #f1f3f5', background: f.picked ? '#fff9db' : 'none' }}>
               <button
                 onClick={() => goTo(f.id)}
-                title="이 영역으로 이동"
+                title={t('area_panel.goto')}
                 style={{ flex: 1, padding: '6px 10px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
               >
-                {f.picked ? '★ ' : ''}{f.name}
+                {f.picked ? '★ ' : ''}{f.name || t('area_panel.untitled')}
               </button>
               <button
                 onClick={() => togglePick(f.id)}
-                title="Claude가 볼 영역으로 지정/해제 (★)"
+                title={t('area_panel.toggle_pick')}
                 style={{ padding: '6px 4px', border: 'none', background: 'none', cursor: 'pointer', font: 'inherit', opacity: f.picked ? 1 : 0.45 }}
               >
                 🤖
               </button>
               <button
-                onClick={() => dropPin(f.id, f.name)}
-                title="현 위치에 이 영역으로 가는 핀 만들기"
+                onClick={() => dropPin(f.id, f.name || t('area_panel.untitled'))}
+                title={t('area_panel.drop_pin')}
                 style={{ padding: '6px 8px 6px 4px', border: 'none', background: 'none', cursor: 'pointer', font: 'inherit' }}
               >
                 📍
