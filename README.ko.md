@@ -9,6 +9,8 @@
 - 서버리스 / 호스트 초대 / 비상업 — 호스트가 자기 머신에서 열고 초대, 데이터는 호스트 로컬에.
 - Claude는 **MCP**로 붙는다.
 
+![canvas-forge 보드 — Claude가 볼 영역(★) 지정, 실시간 동기화, 채팅, 프레임=영역](docs/screenshots/02-board-ko.png)
+
 ## Quick start
 
 ```bash
